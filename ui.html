@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sheets i18n Sync</title>
+    <style>
+      body { font-family: Inter, system-ui, sans-serif; margin: 16px; display: grid; gap: 12px; }
+      .field { display: grid; gap: 6px; }
+      label { font-size: 12px; font-weight: 600; }
+      input, select, button { width: 100%; box-sizing: border-box; padding: 8px; font-size: 12px; }
+      .actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+      #status { min-height: 18px; font-size: 12px; white-space: pre-wrap; color: #374151; }
+      #status.error { color: #b91c1c; }
+      #status.success { color: #065f46; }
+      .hint { font-size: 11px; color: #6b7280; }
+    </style>
+  </head>
+  <body>
+    <div class="field">
+      <label for="sheetUrl">Google Sheets URL</label>
+      <input id="sheetUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit" />
+      <div class="hint">CSV endpoint: /gviz/tq?tqx=out:csv (public sheet only)</div>
+    </div>
+
+    <div class="field">
+      <label for="lang">Language</label>
+      <select id="lang"></select>
+      <div class="hint" id="langHint">Fetch first to load language columns.</div>
+    </div>
+
+    <div class="actions">
+      <button id="fetchBtn">Fetch</button>
+      <button id="applyBtn">Apply</button>
+      <button id="exportBtn">Export JSON</button>
+    </div>
+
+    <div id="status"></div>
+
+    <script>
+      let localTranslations = {};
+      let availableLanguages = [];
+
+      const sheetUrlInput = document.getElementById('sheetUrl');
+      const langSelect = document.getElementById('lang');
+      const langHint = document.getElementById('langHint');
+      const statusEl = document.getElementById('status');
+      const fetchBtn = document.getElementById('fetchBtn');
+      const applyBtn = document.getElementById('applyBtn');
+      const exportBtn = document.getElementById('exportBtn');
+
+      function setStatus(message, type = 'success') {
+        statusEl.textContent = message;
+        statusEl.className = type;
+      }
+
+      function setLanguageOptions(languages) {
+        availableLanguages = languages;
+        langSelect.innerHTML = '';
+        for (const lang of languages) {
+          const option = document.createElement('option');
+          option.value = lang;
+          option.textContent = lang;
+          langSelect.appendChild(option);
+        }
+        langHint.textContent = languages.length > 0 ? `Detected languages: ${languages.join(', ')}` : 'No language columns found.';
+      }
+
+      function extractSheetId(urlOrId) {
+        const input = String(urlOrId || '').trim();
+        if (!input) return null;
+        if (/^[a-zA-Z0-9-_]{20,}$/.test(input)) return input;
+
+        try {
+          const url = new URL(input);
+          const match = url.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+          return match ? match[1] : null;
+        } catch {
+          return null;
+        }
+      }
+
+      function buildCsvUrl(sheetId) {
+        return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
+      }
+
+      function parseCsvLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i += 1) {
+          const char = line[i];
+          if (char === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+              current += '"';
+              i += 1;
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (char === ',' && !inQuotes) {
+            result.push(current);
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+
+        result.push(current);
+        return result.map((x) => x.trim());
+      }
+
+      function parseCsv(csvText) {
+        const lines = csvText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+        if (lines.length < 2) {
+          throw new Error('CSV must include a header and at least one data row.');
+        }
+
+        const header = parseCsvLine(lines[0]);
+        const keyIndex = header.indexOf('key');
+        if (keyIndex < 0) {
+          throw new Error('CSV header must include a key column.');
+        }
+
+        const languageColumns = [];
+        for (let i = 0; i < header.length; i += 1) {
+          if (i === keyIndex) continue;
+          const lang = (header[i] || '').trim();
+          if (lang) languageColumns.push({ index: i, lang });
+        }
+
+        if (languageColumns.length === 0) {
+          throw new Error('CSV must include at least one language column (e.g., ko, en, zh).');
+        }
+
+        const map = {};
+        for (let i = 1; i < lines.length; i += 1) {
+          const row = parseCsvLine(lines[i]);
+          const key = (row[keyIndex] || '').trim();
+          if (!key) continue;
+
+          const values = {};
+          for (const col of languageColumns) {
+            values[col.lang] = row[col.index] || '';
+          }
+          map[key] = values;
+        }
+
+        return { translations: map, languages: languageColumns.map((x) => x.lang) };
+      }
+
+      async function fetchTranslations() {
+        const sheetId = extractSheetId(sheetUrlInput.value);
+        if (!sheetId) throw new Error('Invalid Google Sheets URL or Sheet ID.');
+
+        const response = await fetch(buildCsvUrl(sheetId));
+        if (!response.ok) {
+          throw new Error(`Failed to fetch CSV (HTTP ${response.status}). Ensure the sheet is public.`);
+        }
+
+        const csvText = await response.text();
+        return parseCsv(csvText);
+      }
+
+      function downloadJson(filename, jsonText) {
+        const blob = new Blob([jsonText], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      fetchBtn.addEventListener('click', async () => {
+        setStatus('Fetching CSV...', 'success');
+        try {
+          const result = await fetchTranslations();
+          localTranslations = result.translations;
+          setLanguageOptions(result.languages);
+          parent.postMessage({ pluginMessage: { type: 'set-translations', payload: result } }, '*');
+        } catch (error) {
+          setStatus(error instanceof Error ? error.message : 'Unknown fetch error', 'error');
+        }
+      });
+
+      applyBtn.addEventListener('click', () => {
+        if (!langSelect.value) {
+          setStatus('No language available. Click Fetch first.', 'error');
+          return;
+        }
+
+        parent.postMessage({
+          pluginMessage: {
+            type: 'apply-translations',
+            payload: { lang: langSelect.value }
+          }
+        }, '*');
+      });
+
+      exportBtn.addEventListener('click', () => {
+        parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
+      });
+
+      onmessage = (event) => {
+        const msg = event.data.pluginMessage;
+        if (!msg) return;
+
+        if (msg.type === 'error') {
+          setStatus(msg.payload, 'error');
+          return;
+        }
+
+        if (msg.type === 'set-translations-success') {
+          if (Array.isArray(msg.payload.languages)) {
+            setLanguageOptions(msg.payload.languages);
+          }
+          setStatus(`Loaded ${msg.payload.count} keys.`, 'success');
+          return;
+        }
+
+        if (msg.type === 'apply-result') {
+          const r = msg.payload;
+          setStatus(`Done. total TEXT=${r.totalTextNodes}, applied=${r.appliedCount}, missing key=${r.skippedMissingKey}, missing value=${r.skippedMissingValue}`, 'success');
+          return;
+        }
+
+        if (msg.type === 'export-json-result') {
+          const files = msg.payload.files || {};
+          Object.entries(files).forEach(([filename, content]) => downloadJson(filename, content));
+          setStatus(`Downloaded ${Object.keys(files).length} JSON file(s).`, 'success');
+        }
+      };
+    </script>
+  </body>
+</html>

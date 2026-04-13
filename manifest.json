@@ -1,0 +1,11 @@
+{
+  "name": "Sheets i18n Sync",
+  "id": "sheets-i18n-sync-plugin",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["*"]
+  }
+}
