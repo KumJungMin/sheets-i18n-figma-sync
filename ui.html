@@ -17,9 +17,9 @@
   </head>
   <body>
     <div class="field">
-      <label for="sheetUrl">Google Sheets URL</label>
-      <input id="sheetUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit" />
-      <div class="hint">CSV endpoint: /gviz/tq?tqx=out:csv (public sheet only)</div>
+      <label for="sheetUrl">Google Sheets URL / CSV URL / Sheet ID</label>
+      <input id="sheetUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/{SHEET_ID}/..." />
+      <div class="hint">Fetch runs in plugin context to avoid UI CORS restrictions.</div>
     </div>
 
     <div class="field">
@@ -37,9 +37,6 @@
     <div id="status"></div>
 
     <script>
-      let localTranslations = {};
-      let availableLanguages = [];
-
       const sheetUrlInput = document.getElementById('sheetUrl');
       const langSelect = document.getElementById('lang');
       const langHint = document.getElementById('langHint');
@@ -48,117 +45,141 @@
       const applyBtn = document.getElementById('applyBtn');
       const exportBtn = document.getElementById('exportBtn');
 
-      function setStatus(message, type = 'success') {
+      function setStatus(message, type) {
         statusEl.textContent = message;
-        statusEl.className = type;
+        statusEl.className = type || 'success';
       }
 
       function setLanguageOptions(languages) {
-        availableLanguages = languages;
         langSelect.innerHTML = '';
-        for (const lang of languages) {
+        for (let i = 0; i < languages.length; i += 1) {
+          const lang = languages[i];
           const option = document.createElement('option');
           option.value = lang;
           option.textContent = lang;
           langSelect.appendChild(option);
         }
-        langHint.textContent = languages.length > 0 ? `Detected languages: ${languages.join(', ')}` : 'No language columns found.';
+        langHint.textContent = languages.length ? `Detected languages: ${languages.join(', ')}` : 'No language columns found.';
       }
 
-      function extractSheetId(urlOrId) {
-        const input = String(urlOrId || '').trim();
+      function normalizeInput(value) {
+        return String(value || '').trim().replace(/^['"\s]+|['"\s]+$/g, '');
+      }
+
+      function extractSheetInfo(inputValue) {
+        const input = normalizeInput(inputValue);
         if (!input) return null;
-        if (/^[a-zA-Z0-9-_]{20,}$/.test(input)) return input;
 
-        try {
-          const url = new URL(input);
-          const match = url.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-          return match ? match[1] : null;
-        } catch {
-          return null;
+        const idMatch = input.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+        const gidMatch = input.match(/[?#&]gid=([0-9]+)/);
+        if (idMatch) {
+          return { sheetId: idMatch[1], gid: gidMatch ? gidMatch[1] : '0' };
         }
+
+        if (/^[a-zA-Z0-9-_]{20,}$/.test(input)) {
+          return { sheetId: input, gid: '0' };
+        }
+
+        return null;
       }
 
-      function buildCsvUrl(sheetId) {
-        return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
+      function gvizJsonpUrl(sheetId, gid) {
+        return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&gid=${gid || '0'}`;
       }
 
-      function parseCsvLine(line) {
-        const result = [];
-        let current = '';
-        let inQuotes = false;
+      function fetchSheetViaJsonp(sheetId, gid) {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          const timeout = setTimeout(() => {
+            cleanup();
+            reject(new Error('JSONP request timed out. Check sheet sharing and gid.'));
+          }, 10000);
 
-        for (let i = 0; i < line.length; i += 1) {
-          const char = line[i];
-          if (char === '"') {
-            if (inQuotes && line[i + 1] === '"') {
-              current += '"';
-              i += 1;
+          const prevGoogle = window.google;
+
+          function cleanup() {
+            clearTimeout(timeout);
+            if (script.parentNode) script.parentNode.removeChild(script);
+            if (prevGoogle === undefined) {
+              try { delete window.google; } catch (e) { window.google = undefined; }
             } else {
-              inQuotes = !inQuotes;
+              window.google = prevGoogle;
             }
-          } else if (char === ',' && !inQuotes) {
-            result.push(current);
-            current = '';
-          } else {
-            current += char;
           }
-        }
 
-        result.push(current);
-        return result.map((x) => x.trim());
+          window.google = window.google || {};
+          window.google.visualization = window.google.visualization || {};
+          window.google.visualization.Query = window.google.visualization.Query || {};
+          window.google.visualization.Query.setResponse = (payload) => {
+            cleanup();
+            resolve(payload);
+          };
+
+          script.onerror = () => {
+            cleanup();
+            reject(new Error('Failed to load Google Sheets JSONP response.'));
+          };
+
+          script.src = gvizJsonpUrl(sheetId, gid);
+          document.body.appendChild(script);
+        });
       }
 
-      function parseCsv(csvText) {
-        const lines = csvText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-        if (lines.length < 2) {
-          throw new Error('CSV must include a header and at least one data row.');
+      function parseGvizPayload(payload) {
+        if (!payload || !payload.table || !payload.table.cols || !payload.table.rows) {
+          throw new Error('Invalid GViz response. Ensure the sheet is public.');
         }
 
-        const header = parseCsvLine(lines[0]);
-        const keyIndex = header.indexOf('key');
+        const cols = payload.table.cols;
+        const rows = payload.table.rows;
+
+        const normalize = (v) => String(v || '').replace(/^﻿/, '').trim().toLowerCase();
+        let normalizedHeaders = cols.map((c) => normalize(c && c.label));
+        let dataStartIndex = 0;
+
+        let keyIndex = normalizedHeaders.indexOf('key');
+
+        // Some GViz responses do not populate column labels from header row.
+        // In that case use the first row as header fallback.
+        if (keyIndex < 0 && rows.length > 0) {
+          const headerCells = rows[0].c || [];
+          normalizedHeaders = [];
+          for (let i = 0; i < cols.length; i += 1) {
+            const cell = headerCells[i];
+            normalizedHeaders.push(normalize(cell && cell.v != null ? String(cell.v) : ''));
+          }
+          keyIndex = normalizedHeaders.indexOf('key');
+          if (keyIndex >= 0) dataStartIndex = 1;
+        }
+
         if (keyIndex < 0) {
-          throw new Error('CSV header must include a key column.');
+          throw new Error('Sheet must have a key column.');
         }
 
-        const languageColumns = [];
-        for (let i = 0; i < header.length; i += 1) {
+        const langCols = [];
+        for (let i = 0; i < normalizedHeaders.length; i += 1) {
           if (i === keyIndex) continue;
-          const lang = (header[i] || '').trim();
-          if (lang) languageColumns.push({ index: i, lang });
+          if (normalizedHeaders[i]) langCols.push({ index: i, lang: normalizedHeaders[i] });
         }
+        if (!langCols.length) throw new Error('Sheet must have at least one language column.');
 
-        if (languageColumns.length === 0) {
-          throw new Error('CSV must include at least one language column (e.g., ko, en, zh).');
-        }
-
-        const map = {};
-        for (let i = 1; i < lines.length; i += 1) {
-          const row = parseCsvLine(lines[i]);
-          const key = (row[keyIndex] || '').trim();
+        const translations = {};
+        for (let r = dataStartIndex; r < rows.length; r += 1) {
+          const cells = rows[r].c || [];
+          const keyCell = cells[keyIndex];
+          const key = keyCell && keyCell.v != null ? String(keyCell.v).trim() : '';
           if (!key) continue;
 
-          const values = {};
-          for (const col of languageColumns) {
-            values[col.lang] = row[col.index] || '';
+          const entry = {};
+          for (let j = 0; j < langCols.length; j += 1) {
+            const col = langCols[j];
+            const cell = cells[col.index];
+            entry[col.lang] = cell && cell.v != null ? String(cell.v) : '';
           }
-          map[key] = values;
+          translations[key] = entry;
         }
 
-        return { translations: map, languages: languageColumns.map((x) => x.lang) };
-      }
-
-      async function fetchTranslations() {
-        const sheetId = extractSheetId(sheetUrlInput.value);
-        if (!sheetId) throw new Error('Invalid Google Sheets URL or Sheet ID.');
-
-        const response = await fetch(buildCsvUrl(sheetId));
-        if (!response.ok) {
-          throw new Error(`Failed to fetch CSV (HTTP ${response.status}). Ensure the sheet is public.`);
-        }
-
-        const csvText = await response.text();
-        return parseCsv(csvText);
+        return { translations, languages: langCols.map((x) => x.lang) };
       }
 
       function downloadJson(filename, jsonText) {
@@ -173,19 +194,25 @@
         URL.revokeObjectURL(url);
       }
 
-      fetchBtn.addEventListener('click', async () => {
-        setStatus('Fetching CSV...', 'success');
+      fetchBtn.addEventListener('click', async function () {
+        const info = extractSheetInfo(sheetUrlInput.value);
+        if (!info) {
+          setStatus('Invalid Google Sheets URL / CSV URL / Sheet ID.', 'error');
+          return;
+        }
+
+        setStatus('Fetching via Google GViz JSONP...', 'success');
         try {
-          const result = await fetchTranslations();
-          localTranslations = result.translations;
-          setLanguageOptions(result.languages);
-          parent.postMessage({ pluginMessage: { type: 'set-translations', payload: result } }, '*');
+          const payload = await fetchSheetViaJsonp(info.sheetId, info.gid);
+          const parsed = parseGvizPayload(payload);
+          setLanguageOptions(parsed.languages);
+          parent.postMessage({ pluginMessage: { type: 'set-translations', payload: parsed } }, '*');
         } catch (error) {
-          setStatus(error instanceof Error ? error.message : 'Unknown fetch error', 'error');
+          setStatus(error instanceof Error ? error.message : 'Fetch failed', 'error');
         }
       });
 
-      applyBtn.addEventListener('click', () => {
+      applyBtn.addEventListener('click', function () {
         if (!langSelect.value) {
           setStatus('No language available. Click Fetch first.', 'error');
           return;
@@ -194,16 +221,16 @@
         parent.postMessage({
           pluginMessage: {
             type: 'apply-translations',
-            payload: { lang: langSelect.value }
-          }
+            payload: { lang: langSelect.value },
+          },
         }, '*');
       });
 
-      exportBtn.addEventListener('click', () => {
+      exportBtn.addEventListener('click', function () {
         parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
       });
 
-      onmessage = (event) => {
+      onmessage = function (event) {
         const msg = event.data.pluginMessage;
         if (!msg) return;
 
@@ -213,9 +240,8 @@
         }
 
         if (msg.type === 'set-translations-success') {
-          if (Array.isArray(msg.payload.languages)) {
-            setLanguageOptions(msg.payload.languages);
-          }
+          const languages = Array.isArray(msg.payload.languages) ? msg.payload.languages : [];
+          setLanguageOptions(languages);
           setStatus(`Loaded ${msg.payload.count} keys.`, 'success');
           return;
         }
@@ -228,7 +254,9 @@
 
         if (msg.type === 'export-json-result') {
           const files = msg.payload.files || {};
-          Object.entries(files).forEach(([filename, content]) => downloadJson(filename, content));
+          Object.entries(files).forEach(function (entry) {
+            downloadJson(entry[0], entry[1]);
+          });
           setStatus(`Downloaded ${Object.keys(files).length} JSON file(s).`, 'success');
         }
       };

@@ -6,6 +6,10 @@
   "ui": "ui.html",
   "editorType": ["figma"],
   "networkAccess": {
-    "allowedDomains": ["*"]
-  }
+    "allowedDomains": [
+        "https://docs.google.com",
+        "https://docs.googleusercontent.com"
+    ],
+    "reasoning": "Fetch i18n data from Google Sheets"
+    }
 }
