@@ -346,7 +346,40 @@
     <div class="plugin">
       <div class="header">
         <div class="logo">
-            <img src="assets/logo.svg" width="20px" height="20px"/>
+            <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="bg" x1="20" y1="16" x2="108" y2="112" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#7C3AED"></stop>
+                <stop offset="1" stop-color="#6366F1"></stop>
+                </linearGradient>
+                <linearGradient id="accent" x1="34" y1="34" x2="92" y2="92" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#22C55E"></stop>
+                <stop offset="1" stop-color="#10B981"></stop>
+                </linearGradient>
+            </defs>
+
+            <!-- background -->
+            <rect x="12" y="12" width="104" height="104" rx="28" fill="url(#bg)"></rect>
+
+            <!-- left: sheet -->
+            <rect x="28" y="34" width="28" height="40" rx="6" fill="white" fill-opacity="0.96"></rect>
+            <path d="M34 44H50" stroke="#22C55E" stroke-width="3.2" stroke-linecap="round"></path>
+            <path d="M34 52H50" stroke="#22C55E" stroke-width="3.2" stroke-linecap="round"></path>
+            <path d="M34 60H45" stroke="#22C55E" stroke-width="3.2" stroke-linecap="round"></path>
+
+            <!-- right: figma-ish design node -->
+            <rect x="72" y="38" width="20" height="20" rx="10" fill="#F9FAFB"></rect>
+            <rect x="72" y="58" width="20" height="20" rx="10" fill="#E5E7EB"></rect>
+            <rect x="92" y="38" width="10" height="20" rx="5" fill="#F9FAFB"></rect>
+            <rect x="92" y="58" width="10" height="20" rx="5" fill="url(#accent)"></rect>
+
+            <!-- sync arrow -->
+            <path d="M54 86C61 94 74 95 83 88" stroke="white" stroke-width="5" stroke-linecap="round"></path>
+            <path d="M80 80L88 87L81 95" stroke="white" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+
+            <!-- subtle key dot -->
+            <circle cx="64" cy="28" r="4" fill="#C4B5FD"></circle>
+            </svg>
         </div>
         <div class="header-text">
           <div class="header-name">Sheets i18n sync</div>
