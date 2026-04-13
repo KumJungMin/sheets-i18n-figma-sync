@@ -2,6 +2,7 @@ figma.showUI(__html__, { width: 440, height: 460 });
 
 let translations = {};
 let availableLanguages = [];
+const HISTORY_KEY = 'sheets_i18n_history_v1';
 
 function keyFromNodeName(name) {
   if (!name || name[0] !== '*') return null;
@@ -249,6 +250,22 @@ async function applyTranslations(lang) {
 
 figma.ui.onmessage = async function (msg) {
   try {
+
+    if (msg.type === 'get-history') {
+      var list = await figma.clientStorage.getAsync(HISTORY_KEY);
+      if (!Array.isArray(list)) list = [];
+      figma.ui.postMessage({ type: 'history-loaded', payload: { history: list } });
+      return;
+    }
+
+    if (msg.type === 'save-history') {
+      var historyPayload = msg && msg.payload ? msg.payload : {};
+      var nextHistory = Array.isArray(historyPayload.history) ? historyPayload.history : [];
+      await figma.clientStorage.setAsync(HISTORY_KEY, nextHistory);
+      figma.ui.postMessage({ type: 'history-loaded', payload: { history: nextHistory } });
+      return;
+    }
+
     if (msg.type === 'set-translations') {
       var incoming = msg && msg.payload ? msg.payload : {};
       translations = incoming.translations || {};

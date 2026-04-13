@@ -4,262 +4,792 @@
     <meta charset="UTF-8" />
     <title>Sheets i18n Sync</title>
     <style>
-      body { font-family: Inter, system-ui, sans-serif; margin: 16px; display: grid; gap: 12px; }
-      .field { display: grid; gap: 6px; }
-      label { font-size: 12px; font-weight: 600; }
-      input, select, button { width: 100%; box-sizing: border-box; padding: 8px; font-size: 12px; }
-      .actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-      #status { min-height: 18px; font-size: 12px; white-space: pre-wrap; color: #374151; }
-      #status.error { color: #b91c1c; }
-      #status.success { color: #065f46; }
-      .hint { font-size: 11px; color: #6b7280; }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      :root {
+        --bg: #fafaf9;
+        --bg2: #f4f3f1;
+        --bg3: #eceae7;
+        --bg4: #e3e1dd;
+        --white: #ffffff;
+        --border: rgba(0, 0, 0, 0.07);
+        --border2: rgba(0, 0, 0, 0.13);
+        --txt: #1c1917;
+        --txt2: #78716c;
+        --txt3: #a8a29e;
+        --v: #6c63ff;
+        --v2: #ede9fe;
+        --v3: #4c46b6;
+        --v4: #ddd6fe;
+        --ok: #059669;
+        --ok2: #d1fae5;
+        --ok3: #a7f3d0;
+        --err: #dc2626;
+        --err2: #fee2e2;
+        --err3: #fca5a5;
+        --r: 8px;
+        --rs: 6px;
+      }
+      body {
+        font-family: "Inter", system-ui, sans-serif;
+        font-size: 12px;
+        background: var(--bg);
+        color: var(--txt);
+        line-height: 1.5;
+      }
+      .plugin {
+        display: flex;
+        flex-direction: column;
+        min-height: 500px;
+      }
+      .header {
+        padding: 14px 16px 13px;
+        background: var(--white);
+        border-bottom: 0.5px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .logo {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        background: var(--v);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .header-text {
+        flex: 1;
+      }
+      .header-name {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--txt);
+        letter-spacing: -0.02em;
+      }
+      .header-desc {
+        font-size: 10px;
+        color: var(--txt3);
+        margin-top: 1px;
+      }
+      .header-badge {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 3px 7px;
+        border-radius: 20px;
+        background: var(--v2);
+        color: var(--v3);
+        border: 0.5px solid var(--v4);
+      }
+      .body {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+      }
+      .card {
+        background: var(--white);
+        margin: 10px 12px 0;
+        border-radius: 10px;
+        border: 0.5px solid var(--border2);
+        overflow: hidden;
+      }
+      .card:last-of-type {
+        margin-bottom: 10px;
+      }
+      .card-head {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 10px 13px 9px;
+        border-bottom: 0.5px solid var(--border);
+        background: var(--bg);
+      }
+      .card-icon {
+        width: 20px;
+        height: 20px;
+        border-radius: 5px;
+        background: var(--v2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .card-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--txt2);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .card-body {
+        padding: 11px 13px;
+      }
+      input[type="text"],
+      select {
+        width: 100%;
+        height: 32px;
+        padding: 0 11px;
+        font-size: 12px;
+        font-family: inherit;
+        color: var(--txt);
+        background: var(--bg);
+        border: 0.5px solid var(--border2);
+        border-radius: var(--rs);
+        outline: none;
+        appearance: none;
+      }
+      select {
+        padding-right: 28px;
+        cursor: pointer;
+      }
+      input[type="text"]:focus,
+      select:focus {
+        border-color: var(--v);
+        box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.12);
+      }
+      .sel-wrap {
+        position: relative;
+      }
+      .sel-wrap::after {
+        content: "";
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        border-left: 3.5px solid transparent;
+        border-right: 3.5px solid transparent;
+        border-top: 4px solid var(--txt2);
+        pointer-events: none;
+      }
+      .row2 {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 7px;
+        align-items: center;
+      }
+      .hint {
+        font-size: 10.5px;
+        color: var(--txt3);
+        margin-top: 7px;
+        line-height: 1.45;
+      }
+      .pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 8px;
+      }
+      .pill {
+        font-size: 10px;
+        font-weight: 600;
+        padding: 3px 9px;
+        border-radius: 20px;
+        background: var(--bg2);
+        color: var(--txt2);
+        border: 0.5px solid var(--border2);
+        cursor: pointer;
+      }
+      .pill.on {
+        background: var(--v);
+        color: #fff;
+        border-color: var(--v);
+      }
+      .btn {
+        height: 32px;
+        padding: 0 13px;
+        font-size: 12px;
+        font-weight: 500;
+        font-family: inherit;
+        color: var(--txt);
+        background: var(--white);
+        border: 0.5px solid var(--border2);
+        border-radius: var(--rs);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+      }
+      .btn-v {
+        background: var(--v);
+        color: #fff;
+        border-color: var(--v);
+      }
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 6px;
+        padding: 11px 12px;
+        background: var(--bg);
+        border-top: 0.5px solid var(--border);
+      }
+      .tbl-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 9px 13px 8px;
+        background: var(--white);
+        border-radius: 10px 10px 0 0;
+        border: 0.5px solid var(--border2);
+        border-bottom: none;
+        margin: 0 12px;
+      }
+      .tbl-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--txt2);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .tbl-count {
+        font-size: 10px;
+        color: var(--v);
+        font-weight: 600;
+        background: var(--v2);
+        padding: 2px 8px;
+        border-radius: 20px;
+      }
+      .tbl-wrap-outer {
+        margin: 0 12px;
+        border: 0.5px solid var(--border2);
+        border-top: none;
+        border-radius: 0 0 10px 10px;
+        overflow: hidden;
+      }
+      .tbl-wrap {
+        max-height: 178px;
+        overflow-y: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+        table-layout: fixed;
+      }
+      thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        padding: 7px 12px;
+        text-align: left;
+        font-size: 9.5px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--txt3);
+        background: var(--bg2);
+        border-bottom: 0.5px solid var(--border2);
+      }
+      tbody td {
+        padding: 7px 12px;
+        border-bottom: 0.5px solid var(--border);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      td.kc {
+        color: var(--v);
+        cursor: pointer;
+        font-weight: 500;
+        font-family: monospace;
+        font-size: 10px;
+      }
+      .empty-state {
+        text-align: center;
+        padding: 28px 12px;
+        color: var(--txt3);
+        font-size: 11px;
+      }
+      .statusbar {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin: 0 12px 12px;
+        padding: 9px 13px;
+        border-radius: 8px;
+        font-size: 11px;
+        border: 0.5px solid var(--border2);
+        background: var(--white);
+        color: var(--txt3);
+        min-height: 36px;
+      }
+      .statusbar.ok {
+        background: var(--ok2);
+        border-color: var(--ok3);
+        color: var(--ok);
+      }
+      .statusbar.err {
+        background: var(--err2);
+        border-color: var(--err3);
+        color: var(--err);
+      }
+      .sdot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        flex-shrink: 0;
+        opacity: 0.7;
+      }
     </style>
   </head>
   <body>
-    <div class="field">
-      <label for="sheetUrl">Google Sheets URL / CSV URL / Sheet ID</label>
-      <input id="sheetUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/{SHEET_ID}/..." />
-      <div class="hint">Fetch runs in plugin context to avoid UI CORS restrictions.</div>
+    <div class="plugin">
+      <div class="header">
+        <div class="logo"></div>
+        <div class="header-text">
+          <div class="header-name">Sheets i18n sync</div>
+          <div class="header-desc">Google Sheets → Figma translations</div>
+        </div>
+        <span class="header-badge">Beta</span>
+      </div>
+      <div class="body">
+        <div class="card">
+          <div class="card-head">
+            <span class="card-label">Sheet source</span>
+          </div>
+          <div class="card-body">
+            <input
+              id="sheetUrl"
+              type="text"
+              placeholder="Paste Google Sheets URL or Sheet ID…"
+            />
+            <div class="hint">Sheet must be shared to view.</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="card-label">History</span></div>
+          <div class="card-body">
+            <div class="row2">
+              <div class="sel-wrap"><select id="history"></select></div>
+              <button id="syncBtn" class="btn">Sync</button>
+            </div>
+            <div class="hint">
+              Loads stored data and applies language immediately.
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="card-label">Language</span></div>
+          <div class="card-body">
+            <div class="sel-wrap"><select id="lang"></select></div>
+            <div id="langPills" class="pills"></div>
+            <div id="langHint" class="hint">Fetch a sheet first.</div>
+          </div>
+          <div class="actions">
+            <button id="fetchBtn" class="btn btn-v">Fetch</button
+            ><button id="applyBtn" class="btn">Apply</button
+            ><button id="exportBtn" class="btn">Export</button>
+          </div>
+        </div>
+        <div class="tbl-bar">
+          <span class="tbl-label">Data preview</span
+          ><span id="keyCnt" class="tbl-count" style="display: none"></span>
+        </div>
+        <div class="tbl-wrap-outer">
+          <div class="tbl-wrap">
+            <table>
+              <thead>
+                <tr id="tableHead">
+                  <th style="width: 40%">Key</th>
+                </tr>
+              </thead>
+              <tbody id="tableBody">
+                <tr>
+                  <td colspan="4" class="empty-state">
+                    Fetch a sheet to preview translation keys
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div id="statusEl" class="statusbar">
+          <span class="sdot"></span><span>Ready</span>
+        </div>
+      </div>
     </div>
-
-    <div class="field">
-      <label for="lang">Language</label>
-      <select id="lang"></select>
-      <div class="hint" id="langHint">Fetch first to load language columns.</div>
-    </div>
-
-    <div class="actions">
-      <button id="fetchBtn">Fetch</button>
-      <button id="applyBtn">Apply</button>
-      <button id="exportBtn">Export JSON</button>
-    </div>
-
-    <div id="status"></div>
-
     <script>
-      const sheetUrlInput = document.getElementById('sheetUrl');
-      const langSelect = document.getElementById('lang');
-      const langHint = document.getElementById('langHint');
-      const statusEl = document.getElementById('status');
-      const fetchBtn = document.getElementById('fetchBtn');
-      const applyBtn = document.getElementById('applyBtn');
-      const exportBtn = document.getElementById('exportBtn');
-
-      function setStatus(message, type) {
-        statusEl.textContent = message;
-        statusEl.className = type || 'success';
+      const MH = 10;
+      let pendingLang = null;
+      let historyCache = [];
+      const $ = (id) => document.getElementById(id);
+      const sUrl = $("sheetUrl"),
+        hist = $("history"),
+        syncBtn = $("syncBtn");
+      const langSel = $("lang"),
+        langHint = $("langHint"),
+        langPillsEl = $("langPills");
+      const stEl = $("statusEl");
+      const fetchBtn = $("fetchBtn"),
+        applyBtn = $("applyBtn"),
+        exportBtn = $("exportBtn");
+      const thead = $("tableHead"),
+        tbody = $("tableBody"),
+        keyCnt = $("keyCnt");
+      function setStatus(msg, type) {
+        stEl.className = "statusbar " + (type || "");
+        stEl.innerHTML = '<span class="sdot"></span><span>' + msg + "</span>";
       }
-
-      function setLanguageOptions(languages) {
-        langSelect.innerHTML = '';
-        for (let i = 0; i < languages.length; i += 1) {
-          const lang = languages[i];
-          const option = document.createElement('option');
-          option.value = lang;
-          option.textContent = lang;
-          langSelect.appendChild(option);
+      function setLangs(langs) {
+        langSel.innerHTML = "";
+        langPillsEl.innerHTML = "";
+        for (let i = 0; i < langs.length; i++) {
+          const l = langs[i];
+          const o = document.createElement("option");
+          o.value = l;
+          o.textContent = l;
+          langSel.appendChild(o);
+          const p = document.createElement("span");
+          p.className = "pill" + (i === 0 ? " on" : "");
+          p.textContent = l;
+          p.onclick = () => {
+            langSel.value = l;
+            document
+              .querySelectorAll(".pill")
+              .forEach((x) => x.classList.remove("on"));
+            p.classList.add("on");
+          };
+          langPillsEl.appendChild(p);
         }
-        langHint.textContent = languages.length ? `Detected languages: ${languages.join(', ')}` : 'No language columns found.';
+        langHint.style.display = "none";
       }
-
-      function normalizeInput(value) {
-        return String(value || '').trim().replace(/^['"\s]+|['"\s]+$/g, '');
+      langSel.onchange = () => {
+        const v = langSel.value;
+        document
+          .querySelectorAll(".pill")
+          .forEach((p) => p.classList.toggle("on", p.textContent === v));
+      };
+      function ni(v) {
+        return String(v || "")
+          .trim()
+          .replace(/^['"\s]+|['"\s]+$/g, "");
       }
-
-      function extractSheetInfo(inputValue) {
-        const input = normalizeInput(inputValue);
-        if (!input) return null;
-
-        const idMatch = input.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-        const gidMatch = input.match(/[?#&]gid=([0-9]+)/);
-        if (idMatch) {
-          return { sheetId: idMatch[1], gid: gidMatch ? gidMatch[1] : '0' };
-        }
-
-        if (/^[a-zA-Z0-9-_]{20,}$/.test(input)) {
-          return { sheetId: input, gid: '0' };
-        }
-
+      function extract(v) {
+        const s = ni(v);
+        if (!s) return null;
+        const im = s.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+        const gm = s.match(/[?#&]gid=([0-9]+)/);
+        if (im) return { id: im[1], gid: gm ? gm[1] : "0" };
+        if (/^[a-zA-Z0-9-_]{20,}$/.test(s)) return { id: s, gid: "0" };
         return null;
       }
-
-      function gvizJsonpUrl(sheetId, gid) {
-        return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&gid=${gid || '0'}`;
+      function gvizUrl(id, gid) {
+        return (
+          "https://docs.google.com/spreadsheets/d/" +
+          id +
+          "/gviz/tq?tqx=out:json&gid=" +
+          (gid || "0")
+        );
       }
-
-      function fetchSheetViaJsonp(sheetId, gid) {
-        return new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          const timeout = setTimeout(() => {
+      function fetchJsonp(id, gid) {
+        return new Promise((res, rej) => {
+          const s = document.createElement("script");
+          const t = setTimeout(() => {
             cleanup();
-            reject(new Error('JSONP request timed out. Check sheet sharing and gid.'));
+            rej(new Error("Request timed out."));
           }, 10000);
-
-          const prevGoogle = window.google;
-
+          const pv = window.google;
           function cleanup() {
-            clearTimeout(timeout);
-            if (script.parentNode) script.parentNode.removeChild(script);
-            if (prevGoogle === undefined) {
-              try { delete window.google; } catch (e) { window.google = undefined; }
-            } else {
-              window.google = prevGoogle;
-            }
+            clearTimeout(t);
+            if (s.parentNode) s.parentNode.removeChild(s);
+            if (pv === undefined) {
+              try {
+                delete window.google;
+              } catch (e) {
+                window.google = undefined;
+              }
+            } else window.google = pv;
           }
-
           window.google = window.google || {};
           window.google.visualization = window.google.visualization || {};
-          window.google.visualization.Query = window.google.visualization.Query || {};
-          window.google.visualization.Query.setResponse = (payload) => {
+          window.google.visualization.Query =
+            window.google.visualization.Query || {};
+          window.google.visualization.Query.setResponse = (p) => {
             cleanup();
-            resolve(payload);
+            res(p);
           };
-
-          script.onerror = () => {
+          s.onerror = () => {
             cleanup();
-            reject(new Error('Failed to load Google Sheets JSONP response.'));
+            rej(new Error("Failed to load. Check sharing settings."));
           };
-
-          script.src = gvizJsonpUrl(sheetId, gid);
-          document.body.appendChild(script);
+          s.src = gvizUrl(id, gid);
+          document.body.appendChild(s);
         });
       }
-
-      function parseGvizPayload(payload) {
-        if (!payload || !payload.table || !payload.table.cols || !payload.table.rows) {
-          throw new Error('Invalid GViz response. Ensure the sheet is public.');
-        }
-
-        const cols = payload.table.cols;
-        const rows = payload.table.rows;
-
-        const normalize = (v) => String(v || '').replace(/^﻿/, '').trim().toLowerCase();
-        let normalizedHeaders = cols.map((c) => normalize(c && c.label));
-        let dataStartIndex = 0;
-
-        let keyIndex = normalizedHeaders.indexOf('key');
-
-        // Some GViz responses do not populate column labels from header row.
-        // In that case use the first row as header fallback.
-        if (keyIndex < 0 && rows.length > 0) {
-          const headerCells = rows[0].c || [];
-          normalizedHeaders = [];
-          for (let i = 0; i < cols.length; i += 1) {
-            const cell = headerCells[i];
-            normalizedHeaders.push(normalize(cell && cell.v != null ? String(cell.v) : ''));
-          }
-          keyIndex = normalizedHeaders.indexOf('key');
-          if (keyIndex >= 0) dataStartIndex = 1;
-        }
-
-        if (keyIndex < 0) {
-          throw new Error('Sheet must have a key column.');
-        }
-
-        const langCols = [];
-        for (let i = 0; i < normalizedHeaders.length; i += 1) {
-          if (i === keyIndex) continue;
-          if (normalizedHeaders[i]) langCols.push({ index: i, lang: normalizedHeaders[i] });
-        }
-        if (!langCols.length) throw new Error('Sheet must have at least one language column.');
-
-        const translations = {};
-        for (let r = dataStartIndex; r < rows.length; r += 1) {
-          const cells = rows[r].c || [];
-          const keyCell = cells[keyIndex];
-          const key = keyCell && keyCell.v != null ? String(keyCell.v).trim() : '';
-          if (!key) continue;
-
-          const entry = {};
-          for (let j = 0; j < langCols.length; j += 1) {
-            const col = langCols[j];
-            const cell = cells[col.index];
-            entry[col.lang] = cell && cell.v != null ? String(cell.v) : '';
-          }
-          translations[key] = entry;
-        }
-
-        return { translations, languages: langCols.map((x) => x.lang) };
-      }
-
-      function downloadJson(filename, jsonText) {
-        const blob = new Blob([jsonText], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      }
-
-      fetchBtn.addEventListener('click', async function () {
-        const info = extractSheetInfo(sheetUrlInput.value);
-        if (!info) {
-          setStatus('Invalid Google Sheets URL / CSV URL / Sheet ID.', 'error');
-          return;
-        }
-
-        setStatus('Fetching via Google GViz JSONP...', 'success');
-        try {
-          const payload = await fetchSheetViaJsonp(info.sheetId, info.gid);
-          const parsed = parseGvizPayload(payload);
-          setLanguageOptions(parsed.languages);
-          parent.postMessage({ pluginMessage: { type: 'set-translations', payload: parsed } }, '*');
-        } catch (error) {
-          setStatus(error instanceof Error ? error.message : 'Fetch failed', 'error');
-        }
-      });
-
-      applyBtn.addEventListener('click', function () {
-        if (!langSelect.value) {
-          setStatus('No language available. Click Fetch first.', 'error');
-          return;
-        }
-
-        parent.postMessage({
-          pluginMessage: {
-            type: 'apply-translations',
-            payload: { lang: langSelect.value },
-          },
-        }, '*');
-      });
-
-      exportBtn.addEventListener('click', function () {
-        parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
-      });
-
-      onmessage = function (event) {
-        const msg = event.data.pluginMessage;
-        if (!msg) return;
-
-        if (msg.type === 'error') {
-          setStatus(msg.payload, 'error');
-          return;
-        }
-
-        if (msg.type === 'set-translations-success') {
-          const languages = Array.isArray(msg.payload.languages) ? msg.payload.languages : [];
-          setLanguageOptions(languages);
-          setStatus(`Loaded ${msg.payload.count} keys.`, 'success');
-          return;
-        }
-
-        if (msg.type === 'apply-result') {
-          const r = msg.payload;
-          setStatus(`Done. total TEXT=${r.totalTextNodes}, applied=${r.appliedCount}, missing key=${r.skippedMissingKey}, missing value=${r.skippedMissingValue}`, 'success');
-          return;
-        }
-
-        if (msg.type === 'export-json-result') {
-          const files = msg.payload.files || {};
-          Object.entries(files).forEach(function (entry) {
-            downloadJson(entry[0], entry[1]);
+      function parse(p) {
+        if (!(p && p.table && p.table.cols && p.table.rows))
+          throw new Error("Invalid response. Make sheet public.");
+        const cols = p.table.cols,
+          rows = p.table.rows;
+        const n = (v) =>
+          String(v || "")
+            .replace(/^\uFEFF/, "")
+            .trim()
+            .toLowerCase();
+        let hs = cols.map((c) => n(c && c.label)),
+          start = 0,
+          ki = hs.indexOf("key");
+        if (ki < 0 && rows.length) {
+          const hc = rows[0].c || [];
+          hs = cols.map((_, i) => {
+            const cell = hc[i];
+            return n(cell && cell.v != null ? String(cell.v) : "");
           });
-          setStatus(`Downloaded ${Object.keys(files).length} JSON file(s).`, 'success');
+          ki = hs.indexOf("key");
+          if (ki >= 0) start = 1;
+        }
+        if (ki < 0) throw new Error('No "key" column found.');
+        const lc = hs
+          .map((h, i) => (i !== ki && h ? { i: i, lang: h } : null))
+          .filter(Boolean);
+        if (!lc.length) throw new Error("No language columns found.");
+        const tr = {};
+        for (let r = start; r < rows.length; r++) {
+          const cs = rows[r].c || [];
+          const kcell = cs[ki];
+          const key = kcell && kcell.v != null ? String(kcell.v).trim() : "";
+          if (!key) continue;
+          const e = {};
+          lc.forEach((col) => {
+            const c = cs[col.i];
+            e[col.lang] = c && c.v != null ? String(c.v) : "";
+          });
+          tr[key] = e;
+        }
+        return { translations: tr, languages: lc.map((x) => x.lang) };
+      }
+      function saveHistory(list) {
+        historyCache = list.slice(0, MH);
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "save-history",
+              payload: { history: historyCache },
+            },
+          },
+          "*",
+        );
+      }
+      function upsertHistory(record) {
+        const list = historyCache.filter((x) => x.id !== record.id);
+        list.unshift(record);
+        saveHistory(list);
+      }
+      function renderHistory() {
+        hist.innerHTML = "";
+        if (!historyCache.length) {
+          const o = document.createElement("option");
+          o.value = "";
+          o.textContent = "No history yet";
+          hist.appendChild(o);
+          return;
+        }
+        historyCache.forEach((item) => {
+          const o = document.createElement("option");
+          o.value = item.id;
+          o.textContent = item.label + " · " + item.count + " keys";
+          hist.appendChild(o);
+        });
+      }
+      function getHistoryById(id) {
+        return historyCache.find((x) => x.id === id) || null;
+      }
+
+      async function copy(text) {
+        try {
+            const copiedText = `*${text}`
+          if (navigator.clipboard && navigator.clipboard.writeText)
+            await navigator.clipboard.writeText(copiedText);
+          else {
+            const t = document.createElement("textarea");
+            t.value = copiedText;
+            document.body.appendChild(t);
+            t.select();
+            document.execCommand("copy");
+            t.remove();
+          }
+          setStatus("Copied: " + copiedText, "ok");
+        } catch (e) {
+          setStatus("Failed to copy: " + copiedText, "err");
+        }
+      }
+      function renderTable(data) {
+        const langs = data.languages || [];
+        const w = Math.floor(60 / Math.max(langs.length, 1));
+        thead.innerHTML =
+          '<th style="width:40%">Key</th>' +
+          langs
+            .map((l) => '<th style="width:' + w + '%">' + l + "</th>")
+            .join("");
+        tbody.innerHTML = "";
+        const keys = Object.keys(data.translations || {}).sort();
+        if (keys.length) {
+          keyCnt.textContent = keys.length + " keys";
+          keyCnt.style.display = "";
+        } else keyCnt.style.display = "none";
+        if (!keys.length) {
+          tbody.innerHTML =
+            '<tr><td colspan="10" class="empty-state">No translation data</td></tr>';
+          return;
+        }
+        keys.forEach((key) => {
+          const tr = document.createElement("tr");
+          const kt = document.createElement("td");
+          kt.className = "kc";
+          kt.textContent = key;
+          kt.title = "Click to copy";
+          kt.onclick = () => copy(key);
+          tr.appendChild(kt);
+          langs.forEach((l) => {
+            const td = document.createElement("td");
+            td.textContent =
+              (data.translations[key] && data.translations[key][l]) || "";
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+      }
+      function send(data) {
+        parent.postMessage(
+          { pluginMessage: { type: "set-translations", payload: data } },
+          "*",
+        );
+      }
+      fetchBtn.onclick = async () => {
+        const info = extract(sUrl.value);
+        if (!info) {
+          setStatus("Invalid Sheets URL or Sheet ID.", "err");
+          return;
+        }
+        setStatus("Fetching from Google Sheets…");
+        try {
+          const p = await fetchJsonp(info.id, info.gid);
+          const d = parse(p);
+          setLangs(d.languages);
+          renderTable(d);
+          send(d);
+          const rec = {
+            id: info.id + ":" + info.gid,
+            label: info.id,
+            gid: info.gid,
+            count: Object.keys(d.translations).length,
+            fetchedAt: Date.now(),
+            data: d,
+          };
+          upsertHistory(rec);
+          setStatus("Fetched " + rec.count + " keys — saved to history.", "ok");
+        } catch (e) {
+          setStatus((e && e.message) || "Fetch failed", "err");
         }
       };
+      syncBtn.onclick = () => {
+        const s = getHistoryById(hist.value);
+        if (!(s && s.data)) {
+          setStatus("No saved dataset selected.", "err");
+          return;
+        }
+        setLangs(s.data.languages || []);
+        renderTable(s.data);
+        pendingLang =
+          langSel.value || (s.data.languages && s.data.languages[0]) || "";
+        send(s.data);
+        setStatus("Synced: " + s.label, "ok");
+      };
+      applyBtn.onclick = () => {
+        if (!langSel.value) {
+          setStatus("Fetch a sheet first.", "err");
+          return;
+        }
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "apply-translations",
+              payload: { lang: langSel.value },
+            },
+          },
+          "*",
+        );
+      };
+      exportBtn.onclick = () =>
+        parent.postMessage({ pluginMessage: { type: "export-json" } }, "*");
+      onmessage = (e) => {
+        const msg = e.data.pluginMessage;
+        if (!msg) return;
+        if (msg.type === "history-loaded") {
+          historyCache = Array.isArray(msg.payload && msg.payload.history)
+            ? msg.payload.history
+            : [];
+          renderHistory();
+          return;
+        }
+        if (msg.type === "error") {
+          setStatus(msg.payload, "err");
+          return;
+        }
+        if (msg.type === "set-translations-success") {
+          const langs = Array.isArray(msg.payload.languages)
+            ? msg.payload.languages
+            : [];
+          if (langs.length) setLangs(langs);
+          setStatus("Loaded " + msg.payload.count + " keys.", "ok");
+          if (pendingLang) {
+            const l = pendingLang;
+            pendingLang = null;
+            parent.postMessage(
+              {
+                pluginMessage: {
+                  type: "apply-translations",
+                  payload: { lang: l },
+                },
+              },
+              "*",
+            );
+          }
+          return;
+        }
+        if (msg.type === "apply-result") {
+          const r = msg.payload;
+          setStatus(
+            "Applied " +
+              r.appliedCount +
+              " / " +
+              r.totalTextNodes +
+              " text nodes.",
+            "ok",
+          );
+          return;
+        }
+        if (msg.type === "export-json-result") {
+          const files = msg.payload.files || {};
+          Object.entries(files).forEach(([n, c]) => {
+            const b = new Blob([c], { type: "application/json" });
+            const u = URL.createObjectURL(b);
+            const a = document.createElement("a");
+            a.href = u;
+            a.download = n;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(u);
+          });
+          setStatus(
+            "Downloaded " + Object.keys(files).length + " JSON file(s).",
+            "ok",
+          );
+        }
+      };
+      renderHistory();
+      parent.postMessage({ pluginMessage: { type: "get-history" } }, "*");
     </script>
   </body>
 </html>
