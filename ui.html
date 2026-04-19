@@ -357,6 +357,137 @@
         flex-shrink: 0;
         opacity: 0.7;
       }
+      .toast-root {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: flex;
+        justify-content: center;
+        align-items: flex-end;
+        padding: 16px 12px;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 160ms ease;
+      }
+      .toast-root.show {
+        opacity: 1;
+      }
+      .toast-root.ok {
+        align-items: flex-end;
+      }
+      .toast-root.err {
+        align-items: center;
+        background: rgba(28, 25, 23, 0.34);
+        backdrop-filter: blur(3px);
+        pointer-events: auto;
+      }
+      .toast-card {
+        width: min(100%, 360px);
+        border-radius: 14px;
+        border: 0.5px solid var(--border2);
+        background: rgba(255, 255, 255, 0.98);
+        box-shadow: 0 24px 48px rgba(28, 25, 23, 0.16);
+        transform: translateY(12px) scale(0.98);
+        transition:
+          transform 180ms ease,
+          opacity 180ms ease;
+        opacity: 0;
+        overflow: hidden;
+      }
+      .toast-root.show .toast-card {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+      }
+      .toast-root.ok .toast-card {
+        pointer-events: auto;
+      }
+      .toast-root.err .toast-card {
+        border-color: var(--err3);
+        box-shadow: 0 28px 56px rgba(28, 25, 23, 0.22);
+      }
+      .toast-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 15px 8px;
+      }
+      .toast-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+      }
+      .toast-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--txt3);
+        flex-shrink: 0;
+      }
+      .toast-root.ok .toast-dot {
+        background: var(--ok);
+        box-shadow: 0 0 0 5px rgba(5, 150, 105, 0.12);
+      }
+      .toast-root.err .toast-dot {
+        background: var(--err);
+        box-shadow: 0 0 0 5px rgba(220, 38, 38, 0.12);
+      }
+      .toast-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--txt);
+      }
+      .toast-close {
+        width: 28px;
+        height: 28px;
+        border: none;
+        border-radius: 999px;
+        background: var(--bg2);
+        color: var(--txt2);
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .toast-root.err .toast-close {
+        display: inline-flex;
+      }
+      .toast-body {
+        padding: 0 15px 14px;
+      }
+      .toast-message {
+        font-size: 12px;
+        line-height: 1.55;
+        color: var(--txt2);
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .toast-root.err .toast-message {
+        color: var(--txt);
+      }
+      .toast-foot {
+        display: none;
+        justify-content: flex-end;
+        padding: 0 15px 14px;
+      }
+      .toast-root.err .toast-foot {
+        display: flex;
+      }
+      .toast-action {
+        height: 32px;
+        padding: 0 12px;
+        border: none;
+        border-radius: 8px;
+        background: var(--err);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -489,8 +620,35 @@
         </div>
       </div>
     </div>
+    <div id="toastRoot" class="toast-root" hidden>
+      <div id="toastCard" class="toast-card" role="status" aria-live="polite">
+        <div class="toast-head">
+          <div class="toast-badge">
+            <span class="toast-dot"></span>
+            <span id="toastTitle" class="toast-title"></span>
+          </div>
+          <button
+            id="toastCloseBtn"
+            class="toast-close"
+            type="button"
+            aria-label="Dismiss notification"
+          >
+            ×
+          </button>
+        </div>
+        <div class="toast-body">
+          <div id="toastMessage" class="toast-message"></div>
+        </div>
+        <div class="toast-foot">
+          <button id="toastActionBtn" class="toast-action" type="button">
+            Dismiss
+          </button>
+        </div>
+      </div>
+    </div>
     <script>
       const MH = 10;
+      const TOAST_OK_DURATION = 2600;
       let pendingApplyRequest = null;
       let historyCache = [];
       let previewLangs = [];
@@ -500,6 +658,7 @@
         selectedRootCount: 0,
         selectedTextNodeCount: 0,
       };
+      let toastTimer = null;
       const $ = (id) => document.getElementById(id);
       const sUrl = $("sheetUrl"),
         hist = $("history"),
@@ -510,16 +669,68 @@
         applyScopeSel = $("applyScope"),
         scopeHint = $("scopeHint");
       const stEl = $("statusEl");
+      const toastRoot = $("toastRoot"),
+        toastCard = $("toastCard"),
+        toastTitleEl = $("toastTitle"),
+        toastMessageEl = $("toastMessage"),
+        toastCloseBtn = $("toastCloseBtn"),
+        toastActionBtn = $("toastActionBtn");
       const fetchBtn = $("fetchBtn"),
         applyBtn = $("applyBtn"),
         exportBtn = $("exportBtn");
       const thead = $("tableHead"),
         tbody = $("tableBody"),
         keyCnt = $("keyCnt");
+      function clearToastTimer() {
+        if (!toastTimer) return;
+        clearTimeout(toastTimer);
+        toastTimer = null;
+      }
+      function hideToast() {
+        clearToastTimer();
+        toastRoot.hidden = true;
+        toastRoot.className = "toast-root";
+        toastRoot.setAttribute("aria-hidden", "true");
+        toastCard.setAttribute("role", "status");
+      }
+      function showToast(msg, type) {
+        if (!(type === "ok" || type === "err")) {
+          hideToast();
+          return;
+        }
+
+        clearToastTimer();
+        toastRoot.hidden = false;
+        toastRoot.className = "toast-root show " + type;
+        toastCard.setAttribute("role", type === "err" ? "alertdialog" : "status");
+        toastRoot.setAttribute("aria-hidden", "false");
+        toastTitleEl.textContent =
+          type === "err" ? "Error" : "Success";
+        toastMessageEl.textContent = msg;
+
+        if (type === "ok") {
+          toastTimer = setTimeout(() => {
+            hideToast();
+          }, TOAST_OK_DURATION);
+        }
+      }
       function setStatus(msg, type) {
         stEl.className = "statusbar " + (type || "");
         stEl.innerHTML = '<span class="sdot"></span><span>' + msg + "</span>";
+        showToast(msg, type);
       }
+      toastCloseBtn.onclick = () => {
+        hideToast();
+      };
+      toastActionBtn.onclick = () => {
+        hideToast();
+      };
+      toastRoot.onclick = (event) => {
+        if (event.target === toastRoot) hideToast();
+      };
+      toastCard.onclick = (event) => {
+        event.stopPropagation();
+      };
       function updateApplyButtonState() {
         const hasLang = !!langSel.value;
         const isSelectionScope = applyScopeSel.value === "selection";
