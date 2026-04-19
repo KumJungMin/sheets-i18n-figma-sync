@@ -841,12 +841,28 @@
         }
         if (msg.type === "apply-result") {
           const r = msg.payload;
+          const ambiguousNote = r.skippedAmbiguousAncestor
+            ? " Skipped " +
+              r.skippedAmbiguousAncestor +
+              " ambiguous node(s); rename the target text layer with *key."
+            : "";
+          const fontNote = r.skippedFontLoad
+            ? " Skipped " +
+              r.skippedFontLoad +
+              " node(s) due to unavailable fonts" +
+              (Array.isArray(r.fontLoadErrors) && r.fontLoadErrors.length
+                ? " (" + r.fontLoadErrors.join(", ") + ")"
+                : "") +
+              "."
+            : "";
           setStatus(
             "Applied " +
               r.appliedCount +
               " / " +
               r.totalTextNodes +
-              " text nodes.",
+              " text nodes." +
+              ambiguousNote +
+              fontNote,
             "ok",
           );
           return;
