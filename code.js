@@ -5,6 +5,8 @@ let availableLanguages = [];
 const HISTORY_KEY = 'sheets_i18n_history_v1';
 const APPLY_CHUNK_SIZE = 100;
 const MAX_WARNING_SAMPLES = 10;
+const APPLY_SCOPE_PAGE = 'page';
+const APPLY_SCOPE_SELECTION = 'selection';
 const loadedFontCache = new Set();
 const unavailableFontCache = new Map();
 
@@ -246,6 +248,99 @@ function getNodeChildren(node) {
   return node && Array.isArray(node.children) ? node.children : [];
 }
 
+function normalizeApplyScope(scope) {
+  return scope === APPLY_SCOPE_SELECTION ? APPLY_SCOPE_SELECTION : APPLY_SCOPE_PAGE;
+}
+
+function normalizeSelectionRoots(selection) {
+  var selectedIds = new Set();
+  for (var i = 0; i < selection.length; i += 1) {
+    selectedIds.add(selection[i].id);
+  }
+
+  var roots = [];
+  for (var selectionIndex = 0; selectionIndex < selection.length; selectionIndex += 1) {
+    var node = selection[selectionIndex];
+    var current = node.parent;
+    var nestedSelection = false;
+
+    while (current && current.type !== 'PAGE' && current.type !== 'DOCUMENT') {
+      if (selectedIds.has(current.id)) {
+        nestedSelection = true;
+        break;
+      }
+      current = current.parent;
+    }
+
+    if (!nestedSelection) roots.push(node);
+  }
+
+  return roots;
+}
+
+function collectTextNodesFromRoots(roots) {
+  var textNodes = [];
+  var seenTextNodeIds = new Set();
+  var stack = roots.slice().reverse();
+
+  while (stack.length > 0) {
+    var node = stack.pop();
+    if (node.type === 'TEXT') {
+      if (!seenTextNodeIds.has(node.id)) {
+        seenTextNodeIds.add(node.id);
+        textNodes.push(node);
+      }
+      continue;
+    }
+
+    var children = getNodeChildren(node);
+    for (var i = children.length - 1; i >= 0; i -= 1) {
+      stack.push(children[i]);
+    }
+  }
+
+  return textNodes;
+}
+
+function getSelectionTargets() {
+  var selection = figma.currentPage.selection;
+  var roots = normalizeSelectionRoots(selection);
+  var textNodes = collectTextNodesFromRoots(roots);
+
+  return {
+    selection: selection,
+    roots: roots,
+    textNodes: textNodes,
+  };
+}
+
+function createSelectionInfoFromTargets(targets) {
+  return {
+    selectedNodeCount: targets.selection.length,
+    selectedRootCount: targets.roots.length,
+    selectedTextNodeCount: targets.textNodes.length,
+  };
+}
+
+function createSelectionInfo() {
+  return createSelectionInfoFromTargets(getSelectionTargets());
+}
+
+function createEmptySelectionInfo() {
+  return {
+    selectedNodeCount: 0,
+    selectedRootCount: 0,
+    selectedTextNodeCount: 0,
+  };
+}
+
+function postSelectionInfo() {
+  figma.ui.postMessage({
+    type: 'selection-info',
+    payload: createSelectionInfo(),
+  });
+}
+
 function countTextDescendants(node, cache) {
   var cacheKey = node.id;
   if (cache.has(cacheKey)) return cache.get(cacheKey);
@@ -314,21 +409,58 @@ function resolveKeyForTextNode(node, descendantCountCache, ancestorResolutionCac
   return missingResolution;
 }
 
-function createApplyResult(totalTextNodes) {
+function createApplyResult(totalTextNodes, scope, selectionInfo) {
   return {
     totalTextNodes: totalTextNodes,
     appliedCount: 0,
     changedNodeCount: 0,
+    applyScope: scope,
     skippedMissingKey: 0,
     skippedMissingValue: 0,
     skippedAmbiguousAncestor: 0,
     skippedFontLoad: 0,
     fontLoadErrors: [],
+    selectionInfo: selectionInfo || createEmptySelectionInfo(),
   };
 }
 
-function buildApplyPlan(textNodes, lang) {
-  var result = createApplyResult(textNodes.length);
+function resolveApplyTargets(scope) {
+  var normalizedScope = normalizeApplyScope(scope);
+  if (normalizedScope === APPLY_SCOPE_SELECTION) {
+    var selectionTargets = getSelectionTargets();
+    if (selectionTargets.selection.length === 0) {
+      return {
+        type: 'empty-selection',
+        scope: normalizedScope,
+      };
+    }
+
+    if (selectionTargets.textNodes.length === 0) {
+      return {
+        type: 'selection-without-text',
+        scope: normalizedScope,
+        selectionInfo: createSelectionInfoFromTargets(selectionTargets),
+      };
+    }
+
+    return {
+      type: 'success',
+      scope: normalizedScope,
+      textNodes: selectionTargets.textNodes,
+      selectionInfo: createSelectionInfoFromTargets(selectionTargets),
+    };
+  }
+
+  return {
+    type: 'success',
+    scope: normalizedScope,
+    textNodes: figma.currentPage.findAllWithCriteria({ types: ['TEXT'] }),
+    selectionInfo: createSelectionInfo(),
+  };
+}
+
+function buildApplyPlan(textNodes, lang, scope, selectionInfo) {
+  var result = createApplyResult(textNodes.length, scope, selectionInfo);
   var updates = [];
   var descendantCountCache = new Map();
   var ancestorResolutionCache = new Map();
@@ -481,9 +613,21 @@ async function commitTextUpdates(updates, result) {
   }
 }
 
-async function applyTranslations(lang) {
-  var textNodes = figma.currentPage.findAllWithCriteria({ types: ['TEXT'] });
-  var applyPlan = buildApplyPlan(textNodes, lang);
+async function applyTranslations(lang, options) {
+  var applyTargets = resolveApplyTargets(options && options.scope);
+  if (applyTargets.type === 'empty-selection') {
+    throw new Error('Select a frame, group, or text layer to use selection scope.');
+  }
+  if (applyTargets.type === 'selection-without-text') {
+    throw new Error('The current selection does not include any text nodes.');
+  }
+
+  var applyPlan = buildApplyPlan(
+    applyTargets.textNodes,
+    lang,
+    applyTargets.scope,
+    applyTargets.selectionInfo
+  );
   if (applyPlan.updates.length === 0) return applyPlan.result;
 
   var unavailableFonts = await preloadFontsForUpdates(applyPlan.updates);
@@ -512,8 +656,16 @@ function getErrorMessage(error) {
   }
 }
 
+figma.on('selectionchange', postSelectionInfo);
+figma.on('currentpagechange', postSelectionInfo);
+
 figma.ui.onmessage = async function (msg) {
   try {
+
+    if (msg.type === 'get-selection-info') {
+      postSelectionInfo();
+      return;
+    }
 
     if (msg.type === 'get-history') {
       var list = await figma.clientStorage.getAsync(HISTORY_KEY);
@@ -563,12 +715,13 @@ figma.ui.onmessage = async function (msg) {
 
       var applyPayload = msg && msg.payload ? msg.payload : {};
       var lang = String(applyPayload.lang || '').trim();
+      var scope = normalizeApplyScope(applyPayload.scope);
       if (!lang) {
         figma.ui.postMessage({ type: 'error', payload: 'Please select a language.' });
         return;
       }
 
-      var applyResult = await applyTranslations(lang);
+      var applyResult = await applyTranslations(lang, { scope: scope });
       var notifyMessage =
         'Applied ' +
         applyResult.appliedCount +
@@ -577,6 +730,9 @@ figma.ui.onmessage = async function (msg) {
         ' change(s) (' +
         lang +
         ').';
+      if (applyResult.applyScope === APPLY_SCOPE_SELECTION) {
+        notifyMessage += ' Selection scope.';
+      }
       if (applyResult.skippedFontLoad > 0) {
         notifyMessage += ' Skipped ' + applyResult.skippedFontLoad + ' due to unavailable fonts.';
       }
@@ -608,3 +764,5 @@ figma.ui.onmessage = async function (msg) {
     figma.ui.postMessage({ type: 'error', payload: message });
   }
 };
+
+postSelectionInfo();

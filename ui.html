@@ -182,6 +182,18 @@
         margin-top: 7px;
         line-height: 1.45;
       }
+      .field-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--txt2);
+        letter-spacing: 0.02em;
+        margin-bottom: 6px;
+      }
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
       .pills {
         display: flex;
         flex-wrap: wrap;
@@ -218,6 +230,11 @@
         align-items: center;
         justify-content: center;
         gap: 5px;
+      }
+      .btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+        background: var(--bg2);
       }
       .btn-v {
         background: var(--v);
@@ -416,8 +433,24 @@
         <div class="card">
           <div class="card-head"><span class="card-label">Language</span></div>
           <div class="card-body">
-            <div class="sel-wrap"><select id="lang"></select></div>
-            <div id="langHint" class="hint">Fetch a sheet first.</div>
+            <div class="stack">
+              <div>
+                <div class="sel-wrap"><select id="lang"></select></div>
+                <div id="langHint" class="hint">Fetch a sheet first.</div>
+              </div>
+              <div>
+                <div class="field-label">Apply Scope</div>
+                <div class="sel-wrap">
+                  <select id="applyScope">
+                    <option value="page">Current page</option>
+                    <option value="selection">Selection only</option>
+                  </select>
+                </div>
+                <div id="scopeHint" class="hint">
+                  Applies across the current page.
+                </div>
+              </div>
+            </div>
           </div>
           <div class="actions">
             <button id="fetchBtn" class="btn btn-v">Fetch</button
@@ -458,17 +491,24 @@
     </div>
     <script>
       const MH = 10;
-      let pendingLang = null;
+      let pendingApplyRequest = null;
       let historyCache = [];
       let previewLangs = [];
       let currentData = { translations: {}, languages: [] };
+      let selectionInfo = {
+        selectedNodeCount: 0,
+        selectedRootCount: 0,
+        selectedTextNodeCount: 0,
+      };
       const $ = (id) => document.getElementById(id);
       const sUrl = $("sheetUrl"),
         hist = $("history"),
         syncBtn = $("syncBtn");
       const langSel = $("lang"),
         langHint = $("langHint"),
-        langPillsEl = $("langPills");
+        langPillsEl = $("langPills"),
+        applyScopeSel = $("applyScope"),
+        scopeHint = $("scopeHint");
       const stEl = $("statusEl");
       const fetchBtn = $("fetchBtn"),
         applyBtn = $("applyBtn"),
@@ -479,6 +519,65 @@
       function setStatus(msg, type) {
         stEl.className = "statusbar " + (type || "");
         stEl.innerHTML = '<span class="sdot"></span><span>' + msg + "</span>";
+      }
+      function updateApplyButtonState() {
+        const hasLang = !!langSel.value;
+        const isSelectionScope = applyScopeSel.value === "selection";
+        const hasSelectionText = selectionInfo.selectedTextNodeCount > 0;
+        applyBtn.disabled = !hasLang || (isSelectionScope && !hasSelectionText);
+      }
+      function renderScopeHint() {
+        if (applyScopeSel.value !== "selection") {
+          scopeHint.textContent =
+            "Applies across the current page. Use Selection only to limit work to the chosen frame or text.";
+          updateApplyButtonState();
+          return;
+        }
+
+        if (selectionInfo.selectedNodeCount === 0) {
+          scopeHint.textContent =
+            "No selection yet. Select a frame, group, or text layer in Figma.";
+          updateApplyButtonState();
+          return;
+        }
+
+        if (selectionInfo.selectedTextNodeCount === 0) {
+          scopeHint.textContent =
+            "Selection found, but it does not include any text nodes.";
+          updateApplyButtonState();
+          return;
+        }
+
+        scopeHint.textContent =
+          "Selection only: " +
+          selectionInfo.selectedNodeCount +
+          " selected layer(s), " +
+          selectionInfo.selectedTextNodeCount +
+          " text node(s) in scope.";
+        updateApplyButtonState();
+      }
+      function setSelectionInfo(info) {
+        selectionInfo = {
+          selectedNodeCount:
+            info && typeof info.selectedNodeCount === "number"
+              ? info.selectedNodeCount
+              : 0,
+          selectedRootCount:
+            info && typeof info.selectedRootCount === "number"
+              ? info.selectedRootCount
+              : 0,
+          selectedTextNodeCount:
+            info && typeof info.selectedTextNodeCount === "number"
+              ? info.selectedTextNodeCount
+              : 0,
+        };
+        renderScopeHint();
+      }
+      function createApplyPayload() {
+        return {
+          lang: langSel.value,
+          scope: applyScopeSel.value || "page",
+        };
       }
       function setLangs(langs) {
         langSel.innerHTML = "";
@@ -492,6 +591,7 @@
         }
         renderPreviewLangPills(langs);
         langHint.style.display = "none";
+        updateApplyButtonState();
       }
       function renderPreviewLangPills(allLangs) {
         langPillsEl.innerHTML = "";
@@ -518,7 +618,12 @@
           langPillsEl.appendChild(p);
         }
       }
-      langSel.onchange = () => {};
+      langSel.onchange = () => {
+        updateApplyButtonState();
+      };
+      applyScopeSel.onchange = () => {
+        renderScopeHint();
+      };
       function ni(v) {
         return String(v || "")
           .trim()
@@ -760,8 +865,10 @@
           const latest = parse(p);
           setLangs(latest.languages || []);
           renderTable(latest);
-          pendingLang =
-            langSel.value || (latest.languages && latest.languages[0]) || "";
+          pendingApplyRequest = {
+            lang: langSel.value || (latest.languages && latest.languages[0]) || "",
+            scope: applyScopeSel.value || "page",
+          };
           send(latest);
 
           const refreshed = {
@@ -782,8 +889,10 @@
           );
           setLangs(s.data.languages || []);
           renderTable(s.data);
-          pendingLang =
-            langSel.value || (s.data.languages && s.data.languages[0]) || "";
+          pendingApplyRequest = {
+            lang: langSel.value || (s.data.languages && s.data.languages[0]) || "",
+            scope: applyScopeSel.value || "page",
+          };
           send(s.data);
         }
       };
@@ -792,11 +901,18 @@
           setStatus("Fetch a sheet first.", "err");
           return;
         }
+        if (
+          applyScopeSel.value === "selection" &&
+          selectionInfo.selectedTextNodeCount === 0
+        ) {
+          setStatus("Select a frame or text layer with text nodes first.", "err");
+          return;
+        }
         parent.postMessage(
           {
             pluginMessage: {
               type: "apply-translations",
-              payload: { lang: langSel.value },
+              payload: createApplyPayload(),
             },
           },
           "*",
@@ -814,6 +930,10 @@
           renderHistory();
           return;
         }
+        if (msg.type === "selection-info") {
+          setSelectionInfo(msg.payload);
+          return;
+        }
         if (msg.type === "error") {
           setStatus(msg.payload, "err");
           return;
@@ -824,14 +944,14 @@
             : [];
           if (langs.length) setLangs(langs);
           setStatus("Loaded " + msg.payload.count + " keys.", "ok");
-          if (pendingLang) {
-            const l = pendingLang;
-            pendingLang = null;
+          if (pendingApplyRequest) {
+            const nextApply = pendingApplyRequest;
+            pendingApplyRequest = null;
             parent.postMessage(
               {
                 pluginMessage: {
                   type: "apply-translations",
-                  payload: { lang: l },
+                  payload: nextApply,
                 },
               },
               "*",
@@ -841,6 +961,10 @@
         }
         if (msg.type === "apply-result") {
           const r = msg.payload;
+          const scopeNote =
+            r.applyScope === "selection"
+              ? " Scope: selection."
+              : " Scope: current page.";
           const changedNote =
             typeof r.changedNodeCount === "number"
               ? " Changed target: " + r.changedNodeCount + "."
@@ -865,6 +989,7 @@
               " / " +
               r.totalTextNodes +
               " text nodes." +
+              scopeNote +
               changedNote +
               ambiguousNote +
               fontNote,
@@ -892,7 +1017,9 @@
         }
       };
       renderHistory();
+      renderScopeHint();
       parent.postMessage({ pluginMessage: { type: "get-history" } }, "*");
+      parent.postMessage({ pluginMessage: { type: "get-selection-info" } }, "*");
     </script>
   </body>
 </html>
