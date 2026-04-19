@@ -741,6 +741,7 @@
         saveHistory(list);
       }
       function renderHistory() {
+        const prevValue = hist.value;
         hist.innerHTML = "";
         if (!historyCache.length) {
           const o = document.createElement("option");
@@ -755,9 +756,38 @@
           o.textContent = item.label + " · " + item.count + " keys";
           hist.appendChild(o);
         });
+        const nextValue = historyCache.some((item) => item.id === prevValue)
+          ? prevValue
+          : historyCache[0].id;
+        hist.value = nextValue;
       }
       function getHistoryById(id) {
         return historyCache.find((x) => x.id === id) || null;
+      }
+      function getActiveHistoryRecord() {
+        return getHistoryById(hist.value) || historyCache[0] || null;
+      }
+      function resolveFetchRequest() {
+        const manualInfo = extract(sUrl.value);
+        if (manualInfo) {
+          return {
+            id: manualInfo.id,
+            gid: manualInfo.gid,
+            label: manualInfo.id,
+            sourceType: "manual",
+          };
+        }
+
+        const historyRecord = getActiveHistoryRecord();
+        if (!historyRecord) return null;
+
+        return {
+          id: historyRecord.label,
+          gid: historyRecord.gid || "0",
+          label: historyRecord.label,
+          sourceType: "history",
+          historyId: historyRecord.id,
+        };
       }
 
       async function copy(text) {
@@ -827,28 +857,39 @@
         );
       }
       fetchBtn.onclick = async () => {
-        const info = extract(sUrl.value);
-        if (!info) {
-          setStatus("Invalid Sheets URL or Sheet ID.", "err");
+        const request = resolveFetchRequest();
+        if (!request) {
+          setStatus("Enter Sheet source or use a saved history entry.", "err");
           return;
         }
-        setStatus("Fetching from Google Sheets…");
+        setStatus(
+          request.sourceType === "history"
+            ? "Sheet source is empty, fetching from saved history…"
+            : "Fetching from Google Sheets…"
+        );
         try {
-          const p = await fetchJsonp(info.id, info.gid);
+          const p = await fetchJsonp(request.id, request.gid);
           const d = parse(p);
           setLangs(d.languages);
           renderTable(d);
           send(d);
           const rec = {
-            id: info.id + ":" + info.gid,
-            label: info.id,
-            gid: info.gid,
+            id: request.id + ":" + request.gid,
+            label: request.label,
+            gid: request.gid,
             count: Object.keys(d.translations).length,
             fetchedAt: Date.now(),
             data: d,
           };
           upsertHistory(rec);
-          setStatus("Fetched " + rec.count + " keys — saved to history.", "ok");
+          setStatus(
+            "Fetched " +
+              rec.count +
+              " keys from " +
+              rec.label +
+              " — saved to history.",
+            "ok",
+          );
         } catch (e) {
           setStatus((e && e.message) || "Fetch failed", "err");
         }
