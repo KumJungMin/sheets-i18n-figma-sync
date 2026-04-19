@@ -841,6 +841,10 @@
         }
         if (msg.type === "apply-result") {
           const r = msg.payload;
+          const changedNote =
+            typeof r.changedNodeCount === "number"
+              ? " Changed target: " + r.changedNodeCount + "."
+              : "";
           const ambiguousNote = r.skippedAmbiguousAncestor
             ? " Skipped " +
               r.skippedAmbiguousAncestor +
@@ -861,6 +865,7 @@
               " / " +
               r.totalTextNodes +
               " text nodes." +
+              changedNote +
               ambiguousNote +
               fontNote,
             "ok",

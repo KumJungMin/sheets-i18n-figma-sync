@@ -3,6 +3,10 @@ figma.showUI(__html__, { width: 440, height: 460 });
 let translations = {};
 let availableLanguages = [];
 const HISTORY_KEY = 'sheets_i18n_history_v1';
+const APPLY_CHUNK_SIZE = 100;
+const MAX_WARNING_SAMPLES = 10;
+const loadedFontCache = new Set();
+const unavailableFontCache = new Map();
 
 function keyFromNodeName(name) {
   if (!name || name[0] !== '*') return null;
@@ -205,6 +209,19 @@ function fontLabel(font) {
   return font.family + ' ' + font.style;
 }
 
+function pushUniqueSample(list, value) {
+  if (list.length >= MAX_WARNING_SAMPLES) return false;
+  if (list.indexOf(value) >= 0) return false;
+  list.push(value);
+  return true;
+}
+
+function yieldToMainThread() {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, 0);
+  });
+}
+
 function collectNodeFonts(node) {
   if (node.fontName !== figma.mixed) {
     return [node.fontName];
@@ -223,24 +240,6 @@ function collectNodeFonts(node) {
   }
 
   return result;
-}
-
-async function ensureNodeFontsLoaded(node) {
-  var fonts = collectNodeFonts(node);
-  for (var i = 0; i < fonts.length; i += 1) {
-    var font = fonts[i];
-    try {
-      await figma.loadFontAsync(font);
-    } catch (error) {
-      return {
-        type: 'font-load-error',
-        font: font,
-        message: getErrorMessage(error),
-      };
-    }
-  }
-
-  return { type: 'success' };
 }
 
 function getNodeChildren(node) {
@@ -268,51 +267,81 @@ function countTextDescendants(node, cache) {
   return count;
 }
 
-function resolveKeyForTextNode(node, descendantCountCache) {
+function cacheAncestorResolution(visitedAncestors, resolution, cache) {
+  for (var i = 0; i < visitedAncestors.length; i += 1) {
+    cache.set(visitedAncestors[i].id, resolution);
+  }
+}
+
+function resolveKeyForTextNode(node, descendantCountCache, ancestorResolutionCache) {
   var directKey = keyFromNodeName(node.name);
   if (directKey) return { type: 'direct', key: directKey };
 
+  var visitedAncestors = [];
   var current = node.parent;
   while (current && current.type !== 'PAGE' && current.type !== 'DOCUMENT') {
+    var cached = ancestorResolutionCache.get(current.id);
+    if (cached) {
+      cacheAncestorResolution(visitedAncestors, cached, ancestorResolutionCache);
+      return cached;
+    }
+
+    visitedAncestors.push(current);
     var ancestorKey = keyFromNodeName(current.name);
     if (ancestorKey) {
       var descendantCount = countTextDescendants(current, descendantCountCache);
       if (descendantCount === 1) {
-        return { type: 'ancestor', key: ancestorKey, ownerId: current.id };
+        var singleResolution = { type: 'ancestor', key: ancestorKey, ownerId: current.id };
+        cacheAncestorResolution(visitedAncestors, singleResolution, ancestorResolutionCache);
+        return singleResolution;
       }
 
-      return {
+      var ambiguousResolution = {
         type: 'ambiguous-ancestor',
         key: ancestorKey,
         ownerId: current.id,
         descendantCount: descendantCount,
       };
+      cacheAncestorResolution(visitedAncestors, ambiguousResolution, ancestorResolutionCache);
+      return ambiguousResolution;
     }
 
     current = current.parent;
   }
 
-  return { type: 'missing-key' };
+  var missingResolution = { type: 'missing-key' };
+  cacheAncestorResolution(visitedAncestors, missingResolution, ancestorResolutionCache);
+  return missingResolution;
 }
 
-async function applyTranslations(lang) {
-  var textNodes = figma.currentPage.findAllWithCriteria({ types: ['TEXT'] });
-  var appliedCount = 0;
-  var skippedMissingKey = 0;
-  var skippedMissingValue = 0;
-  var skippedAmbiguousAncestor = 0;
-  var skippedFontLoad = 0;
+function createApplyResult(totalTextNodes) {
+  return {
+    totalTextNodes: totalTextNodes,
+    appliedCount: 0,
+    changedNodeCount: 0,
+    skippedMissingKey: 0,
+    skippedMissingValue: 0,
+    skippedAmbiguousAncestor: 0,
+    skippedFontLoad: 0,
+    fontLoadErrors: [],
+  };
+}
+
+function buildApplyPlan(textNodes, lang) {
+  var result = createApplyResult(textNodes.length);
+  var updates = [];
   var descendantCountCache = new Map();
+  var ancestorResolutionCache = new Map();
   var warnedAmbiguousAncestorIds = new Set();
-  var warnedFontKeys = new Set();
-  var fontLoadErrors = [];
+  var missingKeySamples = [];
+  var missingValueSamples = [];
 
   for (var i = 0; i < textNodes.length; i += 1) {
     var node = textNodes[i];
-    var resolvedKey = resolveKeyForTextNode(node, descendantCountCache);
+    var resolvedKey = resolveKeyForTextNode(node, descendantCountCache, ancestorResolutionCache);
     if (resolvedKey.type === 'missing-key') continue;
     if (resolvedKey.type === 'ambiguous-ancestor') {
-      skippedAmbiguousAncestor += 1;
+      result.skippedAmbiguousAncestor += 1;
       if (!warnedAmbiguousAncestorIds.has(resolvedKey.ownerId)) {
         warnedAmbiguousAncestorIds.add(resolvedKey.ownerId);
         console.warn(
@@ -327,53 +356,145 @@ async function applyTranslations(lang) {
     }
 
     var key = resolvedKey.key;
-
     var entry = translations[key];
     if (!entry) {
-      skippedMissingKey += 1;
-      console.warn('[i18n] Missing key in sheet: ' + key);
+      result.skippedMissingKey += 1;
+      if (pushUniqueSample(missingKeySamples, key)) {
+        console.warn('[i18n] Missing key in sheet: ' + key);
+      }
       continue;
     }
 
     var nextText = entry[lang];
     if (!nextText) {
-      skippedMissingValue += 1;
-      console.warn('[i18n] Missing value (' + lang + ') for key: ' + key);
-      continue;
-    }
-
-    if (node.characters === nextText) continue;
-    var fontLoadResult = await ensureNodeFontsLoaded(node);
-    if (fontLoadResult.type === 'font-load-error') {
-      skippedFontLoad += 1;
-
-      var failedFontKey = fontKey(fontLoadResult.font);
-      if (!warnedFontKeys.has(failedFontKey)) {
-        warnedFontKeys.add(failedFontKey);
-        fontLoadErrors.push(fontLabel(fontLoadResult.font));
-        console.warn(
-          '[i18n] Skipped text node due to unavailable font: ' +
-          fontLabel(fontLoadResult.font) +
-          '. ' +
-          fontLoadResult.message
-        );
+      result.skippedMissingValue += 1;
+      if (pushUniqueSample(missingValueSamples, key)) {
+        console.warn('[i18n] Missing value (' + lang + ') for key: ' + key);
       }
       continue;
     }
 
-    node.characters = nextText;
-    appliedCount += 1;
+    if (node.characters === nextText) continue;
+    updates.push({
+      node: node,
+      nextText: nextText,
+      fonts: collectNodeFonts(node),
+    });
   }
 
-  return {
-    totalTextNodes: textNodes.length,
-    appliedCount: appliedCount,
-    skippedMissingKey: skippedMissingKey,
-    skippedMissingValue: skippedMissingValue,
-    skippedAmbiguousAncestor: skippedAmbiguousAncestor,
-    skippedFontLoad: skippedFontLoad,
-    fontLoadErrors: fontLoadErrors,
-  };
+  result.changedNodeCount = updates.length;
+  return { result: result, updates: updates };
+}
+
+async function preloadFontsForUpdates(updates) {
+  var uniqueFonts = [];
+  var seenFonts = new Set();
+
+  for (var i = 0; i < updates.length; i += 1) {
+    var fonts = updates[i].fonts;
+    for (var j = 0; j < fonts.length; j += 1) {
+      var font = fonts[j];
+      var key = fontKey(font);
+      if (seenFonts.has(key)) continue;
+      seenFonts.add(key);
+      uniqueFonts.push(font);
+    }
+  }
+
+  var unavailableFonts = new Map();
+  for (var fontIndex = 0; fontIndex < uniqueFonts.length; fontIndex += 1) {
+    var nextFont = uniqueFonts[fontIndex];
+    var nextFontKey = fontKey(nextFont);
+
+    if (loadedFontCache.has(nextFontKey)) continue;
+    if (unavailableFontCache.has(nextFontKey)) {
+      unavailableFonts.set(nextFontKey, unavailableFontCache.get(nextFontKey));
+      continue;
+    }
+
+    try {
+      await figma.loadFontAsync(nextFont);
+      loadedFontCache.add(nextFontKey);
+    } catch (error) {
+      var unavailableFont = {
+        font: nextFont,
+        message: getErrorMessage(error),
+      };
+      unavailableFontCache.set(nextFontKey, unavailableFont);
+      unavailableFonts.set(nextFontKey, unavailableFont);
+    }
+
+    if ((fontIndex + 1) % APPLY_CHUNK_SIZE === 0) {
+      await yieldToMainThread();
+    }
+  }
+
+  return unavailableFonts;
+}
+
+function excludeUpdatesWithUnavailableFonts(updates, unavailableFonts, result) {
+  var applicableUpdates = [];
+  var warnedFontKeys = new Set();
+
+  for (var i = 0; i < updates.length; i += 1) {
+    var update = updates[i];
+    var unavailableFont = null;
+
+    for (var j = 0; j < update.fonts.length; j += 1) {
+      var key = fontKey(update.fonts[j]);
+      if (unavailableFonts.has(key)) {
+        unavailableFont = unavailableFonts.get(key);
+        break;
+      }
+    }
+
+    if (!unavailableFont) {
+      applicableUpdates.push(update);
+      continue;
+    }
+
+    result.skippedFontLoad += 1;
+    var failedFontKey = fontKey(unavailableFont.font);
+    if (!warnedFontKeys.has(failedFontKey)) {
+      warnedFontKeys.add(failedFontKey);
+      result.fontLoadErrors.push(fontLabel(unavailableFont.font));
+      console.warn(
+        '[i18n] Skipped text node due to unavailable font: ' +
+        fontLabel(unavailableFont.font) +
+        '. ' +
+        unavailableFont.message
+      );
+    }
+  }
+
+  return applicableUpdates;
+}
+
+async function commitTextUpdates(updates, result) {
+  for (var i = 0; i < updates.length; i += 1) {
+    updates[i].node.characters = updates[i].nextText;
+    result.appliedCount += 1;
+
+    if ((i + 1) % APPLY_CHUNK_SIZE === 0) {
+      await yieldToMainThread();
+    }
+  }
+}
+
+async function applyTranslations(lang) {
+  var textNodes = figma.currentPage.findAllWithCriteria({ types: ['TEXT'] });
+  var applyPlan = buildApplyPlan(textNodes, lang);
+  if (applyPlan.updates.length === 0) return applyPlan.result;
+
+  var unavailableFonts = await preloadFontsForUpdates(applyPlan.updates);
+  var applicableUpdates = excludeUpdatesWithUnavailableFonts(
+    applyPlan.updates,
+    unavailableFonts,
+    applyPlan.result
+  );
+
+  await commitTextUpdates(applicableUpdates, applyPlan.result);
+  return applyPlan.result;
 }
 
 function getErrorMessage(error) {
@@ -448,7 +569,14 @@ figma.ui.onmessage = async function (msg) {
       }
 
       var applyResult = await applyTranslations(lang);
-      var notifyMessage = 'Applied ' + applyResult.appliedCount + ' layer(s) (' + lang + ').';
+      var notifyMessage =
+        'Applied ' +
+        applyResult.appliedCount +
+        ' / ' +
+        applyResult.changedNodeCount +
+        ' change(s) (' +
+        lang +
+        ').';
       if (applyResult.skippedFontLoad > 0) {
         notifyMessage += ' Skipped ' + applyResult.skippedFontLoad + ' due to unavailable fonts.';
       }
