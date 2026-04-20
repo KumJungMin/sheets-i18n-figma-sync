@@ -709,7 +709,7 @@ figma.ui.onmessage = async function (msg) {
 
     if (msg.type === 'apply-translations') {
       if (Object.keys(translations).length === 0) {
-        figma.ui.postMessage({ type: 'error', payload: 'No translation data loaded. Click Fetch first.' });
+        figma.ui.postMessage({ type: 'error', payload: 'No translation data loaded. Load a sheet or XLSX file first.' });
         return;
       }
 
@@ -743,7 +743,7 @@ figma.ui.onmessage = async function (msg) {
 
     if (msg.type === 'export-json') {
       if (Object.keys(translations).length === 0) {
-        figma.ui.postMessage({ type: 'error', payload: 'No translation data loaded. Click Fetch first.' });
+        figma.ui.postMessage({ type: 'error', payload: 'No translation data loaded. Load a sheet or XLSX file first.' });
         return;
       }
 

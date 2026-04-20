@@ -531,22 +531,34 @@
         </div>
         <div class="header-text">
           <div class="header-name">Sheets i18n sync</div>
-          <div class="header-desc">Google Sheets → Figma translations</div>
+          <div class="header-desc">Google Sheets / XLSX translations</div>
         </div>
         <span class="header-badge">1.0.0</span>
       </div>
       <div class="body">
         <div class="card">
           <div class="card-head">
-            <span class="card-label">Sheet source</span>
+            <span class="card-label">Data source</span>
           </div>
           <div class="card-body">
+            <div class="row2">
+              <input
+                id="sheetUrl"
+                type="text"
+                placeholder="Paste Google Sheets URL or Sheet ID…"
+              />
+              <button id="uploadBtn" class="btn" type="button">Upload XLSX</button>
+            </div>
             <input
-              id="sheetUrl"
-              type="text"
-              placeholder="Paste Google Sheets URL or Sheet ID…"
+              id="xlsxInput"
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              hidden
             />
-            <div class="hint">Sheet must be shared to view.</div>
+            <div class="hint">
+              Paste a public Google Sheets URL or upload an XLSX file with a
+              <code>key</code> column.
+            </div>
           </div>
         </div>
         <div class="card">
@@ -557,7 +569,8 @@
               <button id="syncBtn" class="btn">Sync</button>
             </div>
             <div class="hint">
-              Loads stored data and applies language immediately.
+              Saved Sheets refresh latest data. Uploaded XLSX files reuse the
+              saved snapshot.
             </div>
           </div>
         </div>
@@ -567,7 +580,7 @@
             <div class="stack">
               <div>
                 <div class="sel-wrap"><select id="lang"></select></div>
-                <div id="langHint" class="hint">Fetch a sheet first.</div>
+                <div id="langHint" class="hint">Load translation data first.</div>
               </div>
               <div>
                 <div class="field-label">Apply Scope</div>
@@ -584,7 +597,7 @@
             </div>
           </div>
           <div class="actions">
-            <button id="fetchBtn" class="btn btn-v">Fetch</button
+            <button id="fetchBtn" class="btn btn-v">Fetch Sheet</button
             ><button id="applyBtn" class="btn">Apply</button
             ><button id="exportBtn" class="btn">Export</button>
           </div>
@@ -608,7 +621,7 @@
               <tbody id="tableBody">
                 <tr>
                   <td colspan="4" class="empty-state">
-                    Fetch a sheet to preview translation keys
+                    Load a sheet or XLSX file to preview translation keys
                   </td>
                 </tr>
               </tbody>
@@ -659,10 +672,17 @@
         selectedTextNodeCount: 0,
       };
       let toastTimer = null;
+      const HISTORY_SOURCE_SHEET = "sheet";
+      const HISTORY_SOURCE_FILE = "file";
+      const GOOGLE_SHEETS_TIMEOUT_MS = 10000;
+      const XLSX_ACCEPTED_EXTENSIONS = [".xlsx"];
+      const UTF8_DECODER = new TextDecoder("utf-8");
       const $ = (id) => document.getElementById(id);
       const sUrl = $("sheetUrl"),
         hist = $("history"),
-        syncBtn = $("syncBtn");
+        syncBtn = $("syncBtn"),
+        uploadBtn = $("uploadBtn"),
+        xlsxInput = $("xlsxInput");
       const langSel = $("lang"),
         langHint = $("langHint"),
         langPillsEl = $("langPills"),
@@ -835,21 +855,31 @@
       applyScopeSel.onchange = () => {
         renderScopeHint();
       };
-      function ni(v) {
-        return String(v || "")
+      function normalizeSourceInput(value) {
+        return String(value || "")
           .trim()
           .replace(/^['"\s]+|['"\s]+$/g, "");
       }
-      function extract(v) {
-        const s = ni(v);
-        if (!s) return null;
-        const im = s.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-        const gm = s.match(/[?#&]gid=([0-9]+)/);
-        if (im) return { id: im[1], gid: gm ? gm[1] : "0" };
-        if (/^[a-zA-Z0-9-_]{20,}$/.test(s)) return { id: s, gid: "0" };
+      function normalizeHeaderCell(value) {
+        return String(value || "")
+          .replace(/^\uFEFF/, "")
+          .trim()
+          .toLowerCase();
+      }
+      function extractGoogleSheetSource(value) {
+        const sourceText = normalizeSourceInput(value);
+        if (!sourceText) return null;
+        const idMatch = sourceText.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+        const gidMatch = sourceText.match(/[?#&]gid=([0-9]+)/);
+        if (idMatch) {
+          return { id: idMatch[1], gid: gidMatch ? gidMatch[1] : "0" };
+        }
+        if (/^[a-zA-Z0-9-_]{20,}$/.test(sourceText)) {
+          return { id: sourceText, gid: "0" };
+        }
         return null;
       }
-      function gvizUrl(id, gid) {
+      function createGoogleSheetJsonpUrl(id, gid) {
         return (
           "https://docs.google.com/spreadsheets/d/" +
           id +
@@ -857,82 +887,158 @@
           (gid || "0")
         );
       }
-      function fetchJsonp(id, gid) {
-        return new Promise((res, rej) => {
-          const s = document.createElement("script");
-          const t = setTimeout(() => {
+      function fetchGoogleSheetPayload(id, gid) {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          const timeoutId = setTimeout(() => {
             cleanup();
-            rej(new Error("Request timed out."));
-          }, 10000);
-          const pv = window.google;
+            reject(new Error("Request timed out."));
+          }, GOOGLE_SHEETS_TIMEOUT_MS);
+          const previousGoogle = window.google;
           function cleanup() {
-            clearTimeout(t);
-            if (s.parentNode) s.parentNode.removeChild(s);
-            if (pv === undefined) {
+            clearTimeout(timeoutId);
+            if (script.parentNode) script.parentNode.removeChild(script);
+            if (previousGoogle === undefined) {
               try {
                 delete window.google;
               } catch (e) {
                 window.google = undefined;
               }
-            } else window.google = pv;
+            } else {
+              window.google = previousGoogle;
+            }
           }
           window.google = window.google || {};
           window.google.visualization = window.google.visualization || {};
           window.google.visualization.Query =
             window.google.visualization.Query || {};
-          window.google.visualization.Query.setResponse = (p) => {
+          window.google.visualization.Query.setResponse = (payload) => {
             cleanup();
-            res(p);
+            resolve(payload);
           };
-          s.onerror = () => {
+          script.onerror = () => {
             cleanup();
-            rej(new Error("Failed to load. Check sharing settings."));
+            reject(new Error("Failed to load. Check sharing settings."));
           };
-          s.src = gvizUrl(id, gid);
-          document.body.appendChild(s);
+          script.src = createGoogleSheetJsonpUrl(id, gid);
+          document.body.appendChild(script);
         });
       }
-      function parse(p) {
-        if (!(p && p.table && p.table.cols && p.table.rows))
+      function getGoogleSheetCellValue(cell) {
+        return cell && cell.v != null ? String(cell.v) : "";
+      }
+      function extractGoogleSheetRows(payload) {
+        if (!(payload && payload.table && payload.table.cols && payload.table.rows))
           throw new Error("Invalid response. Make sheet public.");
-        const cols = p.table.cols,
-          rows = p.table.rows;
-        const n = (v) =>
-          String(v || "")
-            .replace(/^\uFEFF/, "")
-            .trim()
-            .toLowerCase();
-        let hs = cols.map((c) => n(c && c.label)),
-          start = 0,
-          ki = hs.indexOf("key");
-        if (ki < 0 && rows.length) {
-          const hc = rows[0].c || [];
-          hs = cols.map((_, i) => {
-            const cell = hc[i];
-            return n(cell && cell.v != null ? String(cell.v) : "");
-          });
-          ki = hs.indexOf("key");
-          if (ki >= 0) start = 1;
+
+        const columns = payload.table.cols;
+        const rows = payload.table.rows.map((row) =>
+          columns.map((_, columnIndex) =>
+            getGoogleSheetCellValue((row && row.c && row.c[columnIndex]) || null),
+          ),
+        );
+        const headerRow = columns.map((column) =>
+          column && column.label != null ? String(column.label) : "",
+        );
+
+        if (headerRow.some((label) => normalizeHeaderCell(label))) {
+          return [headerRow].concat(rows);
         }
-        if (ki < 0) throw new Error('No "key" column found.');
-        const lc = hs
-          .map((h, i) => (i !== ki && h ? { i: i, lang: h } : null))
+
+        return rows;
+      }
+      function isNonEmptyTableRow(row) {
+        return Array.isArray(row)
+          ? row.some((value) => String(value || "").trim().length > 0)
+          : false;
+      }
+      function findHeaderRowIndex(rows) {
+        const searchLimit = Math.min(rows.length, 10);
+        for (let rowIndex = 0; rowIndex < searchLimit; rowIndex += 1) {
+          const normalizedRow = rows[rowIndex].map(normalizeHeaderCell);
+          if (normalizedRow.indexOf("key") >= 0) {
+            return rowIndex;
+          }
+        }
+        return -1;
+      }
+      function isRepeatedHeaderRow(row, keyIndex, languageColumns) {
+        if (normalizeHeaderCell(row[keyIndex]) !== "key") return false;
+        return languageColumns.every(
+          (column) => normalizeHeaderCell(row[column.index]) === column.lang,
+        );
+      }
+      function parseTranslationTableRows(rows, options) {
+        const compactRows = Array.isArray(rows)
+          ? rows
+              .filter(isNonEmptyTableRow)
+              .map((row) => row.map((value) => (value == null ? "" : String(value))))
+          : [];
+        if (compactRows.length < 2) {
+          throw new Error(
+            (options && options.sourceLabel
+              ? options.sourceLabel
+              : "Translation data") + " must include a header and at least one row.",
+          );
+        }
+
+        const headerRowIndex = findHeaderRowIndex(compactRows);
+        if (headerRowIndex < 0) {
+          throw new Error('No "key" column found.');
+        }
+
+        const headerRow = compactRows[headerRowIndex];
+        const normalizedHeaderRow = headerRow.map(normalizeHeaderCell);
+        const keyIndex = normalizedHeaderRow.indexOf("key");
+        const languageColumns = normalizedHeaderRow
+          .map((lang, index) =>
+            index !== keyIndex && lang ? { index: index, lang: lang } : null,
+          )
           .filter(Boolean);
-        if (!lc.length) throw new Error("No language columns found.");
-        const tr = {};
-        for (let r = start; r < rows.length; r++) {
-          const cs = rows[r].c || [];
-          const kcell = cs[ki];
-          const key = kcell && kcell.v != null ? String(kcell.v).trim() : "";
-          if (!key) continue;
-          const e = {};
-          lc.forEach((col) => {
-            const c = cs[col.i];
-            e[col.lang] = c && c.v != null ? String(c.v) : "";
-          });
-          tr[key] = e;
+        if (!languageColumns.length) {
+          throw new Error("No language columns found.");
         }
-        return { translations: tr, languages: lc.map((x) => x.lang) };
+
+        const translations = {};
+        for (
+          let rowIndex = headerRowIndex + 1;
+          rowIndex < compactRows.length;
+          rowIndex += 1
+        ) {
+          const row = compactRows[rowIndex];
+          if (isRepeatedHeaderRow(row, keyIndex, languageColumns)) continue;
+
+          const key = String(row[keyIndex] || "").trim();
+          if (!key) continue;
+
+          const entry = {};
+          languageColumns.forEach((column) => {
+            entry[column.lang] = row[column.index] || "";
+          });
+          translations[key] = entry;
+        }
+
+        return {
+          translations: translations,
+          languages: languageColumns.map((column) => column.lang),
+        };
+      }
+      function parseGoogleSheetPayload(payload) {
+        return parseTranslationTableRows(extractGoogleSheetRows(payload), {
+          sourceLabel: "Google Sheets data",
+        });
+      }
+      function createHistorySourceType(record) {
+        return record && record.sourceType === HISTORY_SOURCE_FILE
+          ? HISTORY_SOURCE_FILE
+          : HISTORY_SOURCE_SHEET;
+      }
+      function createHistoryOptionLabel(record) {
+        const prefix =
+          createHistorySourceType(record) === HISTORY_SOURCE_FILE
+            ? "XLSX"
+            : "Sheet";
+        return "[" + prefix + "] " + record.label + " · " + record.count + " keys";
       }
       function saveHistory(list) {
         historyCache = list.slice(0, MH);
@@ -947,72 +1053,389 @@
         );
       }
       function upsertHistory(record) {
-        const list = historyCache.filter((x) => x.id !== record.id);
+        const list = historyCache.filter((item) => item.id !== record.id);
         list.unshift(record);
         saveHistory(list);
       }
       function renderHistory() {
-        const prevValue = hist.value;
+        const previousValue = hist.value;
         hist.innerHTML = "";
         if (!historyCache.length) {
-          const o = document.createElement("option");
-          o.value = "";
-          o.textContent = "No history yet";
-          hist.appendChild(o);
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "No history yet";
+          hist.appendChild(option);
           return;
         }
+
         historyCache.forEach((item) => {
-          const o = document.createElement("option");
-          o.value = item.id;
-          o.textContent = item.label + " · " + item.count + " keys";
-          hist.appendChild(o);
+          const option = document.createElement("option");
+          option.value = item.id;
+          option.textContent = createHistoryOptionLabel(item);
+          hist.appendChild(option);
         });
-        const nextValue = historyCache.some((item) => item.id === prevValue)
-          ? prevValue
+
+        const nextValue = historyCache.some((item) => item.id === previousValue)
+          ? previousValue
           : historyCache[0].id;
         hist.value = nextValue;
       }
       function getHistoryById(id) {
-        return historyCache.find((x) => x.id === id) || null;
+        return historyCache.find((item) => item.id === id) || null;
       }
       function getActiveHistoryRecord() {
         return getHistoryById(hist.value) || historyCache[0] || null;
       }
-      function resolveFetchRequest() {
-        const manualInfo = extract(sUrl.value);
-        if (manualInfo) {
+      function resolveSheetFetchRequest() {
+        const manualSource = extractGoogleSheetSource(sUrl.value);
+        if (manualSource) {
           return {
-            id: manualInfo.id,
-            gid: manualInfo.gid,
-            label: manualInfo.id,
-            sourceType: "manual",
+            id: manualSource.id,
+            gid: manualSource.gid,
+            label: manualSource.id,
+            sourceType: HISTORY_SOURCE_SHEET,
           };
         }
 
         const historyRecord = getActiveHistoryRecord();
         if (!historyRecord) return null;
+        if (createHistorySourceType(historyRecord) !== HISTORY_SOURCE_SHEET) {
+          return null;
+        }
 
         return {
           id: historyRecord.label,
           gid: historyRecord.gid || "0",
           label: historyRecord.label,
-          sourceType: "history",
+          sourceType: HISTORY_SOURCE_SHEET,
           historyId: historyRecord.id,
         };
       }
+      function readUint16(view, offset) {
+        return view.getUint16(offset, true);
+      }
+      function readUint32(view, offset) {
+        return view.getUint32(offset, true);
+      }
+      function decodeUtf8(bytes) {
+        return UTF8_DECODER.decode(bytes);
+      }
+      function findEndOfCentralDirectoryOffset(view) {
+        const minimumOffset = Math.max(0, view.byteLength - 65557);
+        for (let offset = view.byteLength - 22; offset >= minimumOffset; offset -= 1) {
+          if (readUint32(view, offset) === 0x06054b50) {
+            return offset;
+          }
+        }
+        throw new Error("Invalid XLSX file: ZIP end record not found.");
+      }
+      function readZipEntries(arrayBuffer) {
+        const view = new DataView(arrayBuffer);
+        const endOfCentralDirectoryOffset =
+          findEndOfCentralDirectoryOffset(view);
+        const centralDirectorySize = readUint32(
+          view,
+          endOfCentralDirectoryOffset + 12,
+        );
+        const centralDirectoryOffset = readUint32(
+          view,
+          endOfCentralDirectoryOffset + 16,
+        );
+        const entries = new Map();
+        let offset = centralDirectoryOffset;
+        const directoryEnd = centralDirectoryOffset + centralDirectorySize;
 
+        while (offset < directoryEnd) {
+          if (readUint32(view, offset) !== 0x02014b50) {
+            throw new Error("Invalid XLSX file: ZIP central directory is corrupt.");
+          }
+
+          const compressionMethod = readUint16(view, offset + 10);
+          const compressedSize = readUint32(view, offset + 20);
+          const fileNameLength = readUint16(view, offset + 28);
+          const extraFieldLength = readUint16(view, offset + 30);
+          const commentLength = readUint16(view, offset + 32);
+          const localHeaderOffset = readUint32(view, offset + 42);
+          const fileName = decodeUtf8(
+            new Uint8Array(arrayBuffer, offset + 46, fileNameLength),
+          );
+
+          entries.set(fileName, {
+            compressionMethod: compressionMethod,
+            compressedSize: compressedSize,
+            localHeaderOffset: localHeaderOffset,
+          });
+
+          offset += 46 + fileNameLength + extraFieldLength + commentLength;
+        }
+
+        return entries;
+      }
+      async function inflateZipEntry(compressedBytes) {
+        if (typeof DecompressionStream !== "function") {
+          throw new Error(
+            "This Figma runtime does not support XLSX decompression yet.",
+          );
+        }
+
+        const compressedBuffer = compressedBytes.buffer.slice(
+          compressedBytes.byteOffset,
+          compressedBytes.byteOffset + compressedBytes.byteLength,
+        );
+        const algorithms = ["deflate-raw", "deflate"];
+        let lastError = null;
+
+        for (let i = 0; i < algorithms.length; i += 1) {
+          try {
+            const stream = new Blob([compressedBuffer])
+              .stream()
+              .pipeThrough(new DecompressionStream(algorithms[i]));
+            return new Uint8Array(await new Response(stream).arrayBuffer());
+          } catch (error) {
+            lastError = error;
+          }
+        }
+
+        throw lastError || new Error("Failed to decompress XLSX data.");
+      }
+      async function readZipEntryBytes(arrayBuffer, entries, path) {
+        const entry = entries.get(path);
+        if (!entry) {
+          throw new Error("Missing XLSX entry: " + path);
+        }
+
+        const view = new DataView(arrayBuffer);
+        if (readUint32(view, entry.localHeaderOffset) !== 0x04034b50) {
+          throw new Error("Invalid XLSX file: ZIP local header is corrupt.");
+        }
+
+        const fileNameLength = readUint16(view, entry.localHeaderOffset + 26);
+        const extraFieldLength = readUint16(view, entry.localHeaderOffset + 28);
+        const dataOffset =
+          entry.localHeaderOffset + 30 + fileNameLength + extraFieldLength;
+        const compressedBytes = new Uint8Array(
+          arrayBuffer,
+          dataOffset,
+          entry.compressedSize,
+        );
+
+        if (entry.compressionMethod === 0) {
+          return compressedBytes;
+        }
+        if (entry.compressionMethod !== 8) {
+          throw new Error(
+            "Unsupported XLSX compression method: " + entry.compressionMethod,
+          );
+        }
+
+        return inflateZipEntry(compressedBytes);
+      }
+      async function readZipEntryText(arrayBuffer, entries, path) {
+        return decodeUtf8(await readZipEntryBytes(arrayBuffer, entries, path));
+      }
+      function parseXmlDocument(xmlText, label) {
+        const document = new DOMParser().parseFromString(xmlText, "application/xml");
+        if (document.getElementsByTagName("parsererror").length > 0) {
+          throw new Error("Failed to parse " + label + ".");
+        }
+        return document;
+      }
+      function resolveArchivePath(basePath, targetPath) {
+        const baseParts = basePath.split("/").slice(0, -1);
+        const targetParts = String(targetPath || "").split("/");
+
+        targetParts.forEach((part) => {
+          if (!part || part === ".") return;
+          if (part === "..") {
+            baseParts.pop();
+            return;
+          }
+          baseParts.push(part);
+        });
+
+        return baseParts.join("/");
+      }
+      function getAttributeValue(node, attributeName) {
+        if (!node) return "";
+        const directValue = node.getAttribute(attributeName);
+        if (directValue != null) return directValue;
+
+        for (let i = 0; i < node.attributes.length; i += 1) {
+          const attribute = node.attributes[i];
+          if (
+            attribute.name === attributeName ||
+            attribute.localName === attributeName ||
+            attribute.nodeName === attributeName
+          ) {
+            return attribute.value;
+          }
+        }
+
+        return "";
+      }
+      function parseSharedStrings(sharedStringsDocument) {
+        return Array.from(sharedStringsDocument.getElementsByTagName("si")).map(
+          (item) =>
+            Array.from(item.getElementsByTagName("t"))
+              .map((textNode) => textNode.textContent || "")
+              .join(""),
+        );
+      }
+      function cellReferenceToColumnIndex(reference) {
+        const match = String(reference || "").match(/[A-Z]+/i);
+        if (!match) return null;
+
+        let columnIndex = 0;
+        const letters = match[0].toUpperCase();
+        for (let i = 0; i < letters.length; i += 1) {
+          columnIndex = columnIndex * 26 + (letters.charCodeAt(i) - 64);
+        }
+        return columnIndex - 1;
+      }
+      function parseWorksheetCellValue(cellNode, sharedStrings) {
+        const cellType = cellNode.getAttribute("t") || "";
+        if (cellType === "inlineStr") {
+          return Array.from(cellNode.getElementsByTagName("t"))
+            .map((textNode) => textNode.textContent || "")
+            .join("");
+        }
+
+        const valueNode = cellNode.getElementsByTagName("v")[0];
+        const rawValue = valueNode ? valueNode.textContent || "" : "";
+        if (cellType === "s") {
+          const sharedStringIndex = Number(rawValue);
+          return Number.isFinite(sharedStringIndex)
+            ? sharedStrings[sharedStringIndex] || ""
+            : "";
+        }
+        if (cellType === "b") {
+          return rawValue === "1" ? "TRUE" : "FALSE";
+        }
+
+        return rawValue;
+      }
+      function extractWorksheetRows(worksheetDocument, sharedStrings) {
+        return Array.from(worksheetDocument.getElementsByTagName("row")).map(
+          (rowNode) => {
+            const row = [];
+            let nextColumnIndex = 0;
+
+            Array.from(rowNode.getElementsByTagName("c")).forEach((cellNode) => {
+              const columnIndex =
+                cellReferenceToColumnIndex(cellNode.getAttribute("r")) ??
+                nextColumnIndex;
+              row[columnIndex] = parseWorksheetCellValue(cellNode, sharedStrings);
+              nextColumnIndex = columnIndex + 1;
+            });
+
+            return row;
+          },
+        );
+      }
+      function resolveWorkbookSheets(workbookDocument, workbookRelsDocument) {
+        const relationshipMap = new Map();
+        Array.from(workbookRelsDocument.getElementsByTagName("Relationship")).forEach(
+          (relationshipNode) => {
+            const relationshipId = relationshipNode.getAttribute("Id");
+            const targetPath = relationshipNode.getAttribute("Target");
+            if (!relationshipId || !targetPath) return;
+            relationshipMap.set(
+              relationshipId,
+              resolveArchivePath("xl/workbook.xml", targetPath),
+            );
+          },
+        );
+
+        return Array.from(workbookDocument.getElementsByTagName("sheet"))
+          .map((sheetNode) => {
+            const relationshipId =
+              getAttributeValue(sheetNode, "r:id") ||
+              getAttributeValue(sheetNode, "id");
+            const sheetPath = relationshipMap.get(relationshipId);
+            if (!sheetPath) return null;
+
+            return {
+              name: sheetNode.getAttribute("name") || sheetPath,
+              path: sheetPath,
+            };
+          })
+          .filter(Boolean);
+      }
+      async function loadTranslationsFromXlsxFile(file) {
+        const extension = "." + String(file.name || "").split(".").pop().toLowerCase();
+        if (XLSX_ACCEPTED_EXTENSIONS.indexOf(extension) < 0) {
+          throw new Error("Please upload an .xlsx file.");
+        }
+
+        const arrayBuffer = await file.arrayBuffer();
+        const entries = readZipEntries(arrayBuffer);
+        const workbookDocument = parseXmlDocument(
+          await readZipEntryText(arrayBuffer, entries, "xl/workbook.xml"),
+          "workbook.xml",
+        );
+        const workbookRelsDocument = parseXmlDocument(
+          await readZipEntryText(arrayBuffer, entries, "xl/_rels/workbook.xml.rels"),
+          "workbook.xml.rels",
+        );
+        const sharedStrings = entries.has("xl/sharedStrings.xml")
+          ? parseSharedStrings(
+              parseXmlDocument(
+                await readZipEntryText(arrayBuffer, entries, "xl/sharedStrings.xml"),
+                "sharedStrings.xml",
+              ),
+            )
+          : [];
+        const workbookSheets = resolveWorkbookSheets(
+          workbookDocument,
+          workbookRelsDocument,
+        );
+        if (!workbookSheets.length) {
+          throw new Error("No worksheets found in the XLSX file.");
+        }
+
+        let lastError = null;
+        for (let i = 0; i < workbookSheets.length; i += 1) {
+          const sheet = workbookSheets[i];
+
+          try {
+            const worksheetDocument = parseXmlDocument(
+              await readZipEntryText(arrayBuffer, entries, sheet.path),
+              sheet.name,
+            );
+            const data = parseTranslationTableRows(
+              extractWorksheetRows(worksheetDocument, sharedStrings),
+              { sourceLabel: 'Worksheet "' + sheet.name + '"' },
+            );
+            data.sourceMeta = { sheetName: sheet.name, fileName: file.name };
+            return data;
+          } catch (error) {
+            lastError = error;
+          }
+        }
+
+        throw (
+          lastError ||
+          new Error('No worksheet with a "key" column was found in the XLSX file.')
+        );
+      }
+      async function loadTranslationsFromGoogleSheets(request) {
+        return parseGoogleSheetPayload(
+          await fetchGoogleSheetPayload(request.id, request.gid),
+        );
+      }
       async function copy(text) {
+        const copiedText = "*" + text;
+
         try {
-          const copiedText = `*${text}`
-          if (navigator.clipboard && navigator.clipboard.writeText)
+          if (navigator.clipboard && navigator.clipboard.writeText) {
             await navigator.clipboard.writeText(copiedText);
-          else {
-            const t = document.createElement("textarea");
-            t.value = copiedText;
-            document.body.appendChild(t);
-            t.select();
+          } else {
+            const textarea = document.createElement("textarea");
+            textarea.value = copiedText;
+            document.body.appendChild(textarea);
+            textarea.select();
             document.execCommand("copy");
-            t.remove();
+            textarea.remove();
           }
           setStatus("Copied: " + copiedText, "ok");
         } catch (e) {
@@ -1021,24 +1444,26 @@
       }
       function renderTable(data) {
         currentData = data || { translations: {}, languages: [] };
-        const allLangs = data.languages || [];
+        const allLangs = currentData.languages || [];
         const langs = previewLangs.length
           ? previewLangs
           : allLangs.slice(0, Math.min(3, allLangs.length));
-        const w = Math.floor(120 / Math.max(langs.length, 1));
+        const width = Math.floor(120 / Math.max(langs.length, 1));
         thead.innerHTML =
           '<th style="width:40%">Key</th>' +
           langs
-            .map((l) => '<th style="width:' + w + '%">' + l + "</th>")
+            .map((lang) => '<th style="width:' + width + '%">' + lang + "</th>")
             .join("");
         tbody.innerHTML = "";
         const tableEl = tbody.closest("table");
         tableEl.style.minWidth = 220 + langs.length * 160 + "px";
-        const keys = Object.keys(data.translations || {}).sort();
+        const keys = Object.keys(currentData.translations || {}).sort();
         if (keys.length) {
           keyCnt.textContent = keys.length + " keys";
           keyCnt.style.display = "";
-        } else keyCnt.style.display = "none";
+        } else {
+          keyCnt.style.display = "none";
+        }
         if (!keys.length) {
           tbody.innerHTML =
             '<tr><td colspan="10" class="empty-state">No translation data</td></tr>';
@@ -1052,10 +1477,12 @@
           kt.title = "Click to copy";
           kt.onclick = () => copy(key);
           tr.appendChild(kt);
-          langs.forEach((l) => {
+          langs.forEach((lang) => {
             const td = document.createElement("td");
             td.textContent =
-              (data.translations[key] && data.translations[key][l]) || "";
+              (currentData.translations[key] &&
+                currentData.translations[key][lang]) ||
+              "";
             tr.appendChild(td);
           });
           tbody.appendChild(tr);
@@ -1067,90 +1494,140 @@
           "*",
         );
       }
-      fetchBtn.onclick = async () => {
-        const request = resolveFetchRequest();
-        if (!request) {
-          setStatus("Enter Sheet source or use a saved history entry.", "err");
-          return;
-        }
-        setStatus(
-          request.sourceType === "history"
-            ? "Sheet source is empty, fetching from saved history…"
-            : "Fetching from Google Sheets…"
-        );
+      function presentLoadedData(data) {
+        setLangs(data.languages || []);
+        renderTable(data);
+        send(data);
+      }
+      function queueApplyAfterDataLoad(data) {
+        const languages = data && Array.isArray(data.languages) ? data.languages : [];
+        pendingApplyRequest = {
+          lang: langSel.value || languages[0] || "",
+          scope: applyScopeSel.value || "page",
+        };
+      }
+      uploadBtn.onclick = () => {
+        xlsxInput.click();
+      };
+      xlsxInput.onchange = async (event) => {
+        const file =
+          event && event.target && event.target.files ? event.target.files[0] : null;
+        if (!file) return;
+
+        setStatus("Reading XLSX file…");
         try {
-          const p = await fetchJsonp(request.id, request.gid);
-          const d = parse(p);
-          setLangs(d.languages);
-          renderTable(d);
-          send(d);
-          const rec = {
-            id: request.id + ":" + request.gid,
-            label: request.label,
-            gid: request.gid,
-            count: Object.keys(d.translations).length,
+          const data = await loadTranslationsFromXlsxFile(file);
+          presentLoadedData(data);
+
+          const sourceMeta = data.sourceMeta || {};
+          const record = {
+            id: HISTORY_SOURCE_FILE + ":" + file.name,
+            sourceType: HISTORY_SOURCE_FILE,
+            label: file.name,
+            count: Object.keys(data.translations || {}).length,
             fetchedAt: Date.now(),
-            data: d,
+            data: data,
+            sourceMeta: sourceMeta,
           };
-          upsertHistory(rec);
+          upsertHistory(record);
           setStatus(
-            "Fetched " +
-              rec.count +
+            "Loaded " +
+              record.count +
               " keys from " +
-              rec.label +
-              " — saved to history.",
+              file.name +
+              (sourceMeta.sheetName ? " (" + sourceMeta.sheetName + ")." : "."),
             "ok",
           );
-        } catch (e) {
-          setStatus((e && e.message) || "Fetch failed", "err");
+        } catch (error) {
+          setStatus((error && error.message) || "Failed to read XLSX file.", "err");
+        } finally {
+          xlsxInput.value = "";
+        }
+      };
+      fetchBtn.onclick = async () => {
+        const request = resolveSheetFetchRequest();
+        if (!request) {
+          setStatus(
+            "Enter a Google Sheets source or choose a saved sheet history entry.",
+            "err",
+          );
+          return;
+        }
+
+        setStatus("Fetching from Google Sheets…");
+        try {
+          const data = await loadTranslationsFromGoogleSheets(request);
+          presentLoadedData(data);
+
+          const record = {
+            id: request.id + ":" + request.gid,
+            sourceType: HISTORY_SOURCE_SHEET,
+            label: request.label,
+            gid: request.gid,
+            count: Object.keys(data.translations).length,
+            fetchedAt: Date.now(),
+            data: data,
+          };
+          upsertHistory(record);
+          setStatus(
+            "Fetched " +
+              record.count +
+              " keys from " +
+              record.label +
+              " and saved the snapshot.",
+            "ok",
+          );
+        } catch (error) {
+          setStatus((error && error.message) || "Fetch failed", "err");
         }
       };
       syncBtn.onclick = async () => {
-        const s = getHistoryById(hist.value);
-        if (!(s && s.data)) {
+        const record = getHistoryById(hist.value);
+        if (!(record && record.data)) {
           setStatus("No saved dataset selected.", "err");
           return;
         }
-        setStatus("Reloading latest data before sync…");
+
+        if (createHistorySourceType(record) === HISTORY_SOURCE_FILE) {
+          setStatus("Loading saved XLSX snapshot…");
+          queueApplyAfterDataLoad(record.data);
+          presentLoadedData(record.data);
+          return;
+        }
+
+        setStatus("Reloading latest Google Sheets data…");
         try {
-          const p = await fetchJsonp(s.label, s.gid || "0");
-          const latest = parse(p);
-          setLangs(latest.languages || []);
-          renderTable(latest);
-          pendingApplyRequest = {
-            lang: langSel.value || (latest.languages && latest.languages[0]) || "",
-            scope: applyScopeSel.value || "page",
-          };
-          send(latest);
+          const latest = await loadTranslationsFromGoogleSheets({
+            id: record.label,
+            gid: record.gid || "0",
+          });
+          queueApplyAfterDataLoad(latest);
+          presentLoadedData(latest);
 
           const refreshed = {
-            id: s.id,
-            label: s.label,
-            gid: s.gid || "0",
+            id: record.id,
+            sourceType: HISTORY_SOURCE_SHEET,
+            label: record.label,
+            gid: record.gid || "0",
             count: Object.keys(latest.translations || {}).length,
             fetchedAt: Date.now(),
             data: latest,
           };
           upsertHistory(refreshed);
-          setStatus("Synced latest data: " + s.label, "ok");
-        } catch (e) {
+          setStatus("Synced latest data: " + record.label, "ok");
+        } catch (error) {
           setStatus(
             "Latest reload failed, using saved data. " +
-              ((e && e.message) || ""),
+              ((error && error.message) || ""),
             "err",
           );
-          setLangs(s.data.languages || []);
-          renderTable(s.data);
-          pendingApplyRequest = {
-            lang: langSel.value || (s.data.languages && s.data.languages[0]) || "",
-            scope: applyScopeSel.value || "page",
-          };
-          send(s.data);
+          queueApplyAfterDataLoad(record.data);
+          presentLoadedData(record.data);
         }
       };
       applyBtn.onclick = () => {
         if (!langSel.value) {
-          setStatus("Fetch a sheet first.", "err");
+          setStatus("Load translation data first.", "err");
           return;
         }
         if (
