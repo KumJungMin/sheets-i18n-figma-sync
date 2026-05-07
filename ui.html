@@ -583,6 +583,20 @@
                 <div id="langHint" class="hint">Load translation data first.</div>
               </div>
               <div>
+                <div class="field-label">Key Mapping</div>
+                <div class="sel-wrap">
+                  <select id="keyMode">
+                    <option value="direct">General key</option>
+                    <option value="frame">Frame key</option>
+                  </select>
+                </div>
+                <div class="hint">
+                  General key uses <code>*title</code> directly. Frame key maps
+                  <code>*title</code> under <code>PD_JOIN_ServiceGuide</code> to
+                  <code>PD_JOIN_ServiceGuide.title</code>.
+                </div>
+              </div>
+              <div>
                 <div class="field-label">Apply Scope</div>
                 <div class="sel-wrap">
                   <select id="applyScope">
@@ -686,6 +700,7 @@
       const langSel = $("lang"),
         langHint = $("langHint"),
         langPillsEl = $("langPills"),
+        keyModeSel = $("keyMode"),
         applyScopeSel = $("applyScope"),
         scopeHint = $("scopeHint");
       const stEl = $("statusEl");
@@ -808,6 +823,7 @@
         return {
           lang: langSel.value,
           scope: applyScopeSel.value || "page",
+          keyMode: keyModeSel.value || "direct",
         };
       }
       function setLangs(langs) {
@@ -1504,10 +1520,20 @@
         pendingApplyRequest = {
           lang: langSel.value || languages[0] || "",
           scope: applyScopeSel.value || "page",
+          keyMode: keyModeSel.value || "direct",
         };
       }
-      uploadBtn.onclick = () => {
+      function openXlsxPicker() {
+        if (typeof xlsxInput.showPicker === "function") {
+          try {
+            xlsxInput.showPicker();
+            return;
+          } catch (error) {}
+        }
         xlsxInput.click();
+      }
+      uploadBtn.onclick = () => {
+        openXlsxPicker();
       };
       xlsxInput.onchange = async (event) => {
         const file =
@@ -1703,6 +1729,17 @@
               r.skippedAmbiguousAncestor +
               " ambiguous node(s); rename the target text layer with *key."
             : "";
+          const missingKeyNote = r.skippedMissingKey
+            ? " Missing key: " + r.skippedMissingKey + "."
+            : "";
+          const missingValueNote = r.skippedMissingValue
+            ? " Missing value: " + r.skippedMissingValue + "."
+            : "";
+          const screenFrameNote = r.skippedMissingScreenFrame
+            ? " Skipped " +
+              r.skippedMissingScreenFrame +
+              " node(s) without a top-level frame for Frame key mode."
+            : "";
           const fontNote = r.skippedFontLoad
             ? " Skipped " +
               r.skippedFontLoad +
@@ -1720,7 +1757,10 @@
               " text nodes." +
               scopeNote +
               changedNote +
+              missingKeyNote +
+              missingValueNote +
               ambiguousNote +
+              screenFrameNote +
               fontNote,
             "ok",
           );

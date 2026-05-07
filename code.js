@@ -7,6 +7,8 @@ const APPLY_CHUNK_SIZE = 100;
 const MAX_WARNING_SAMPLES = 10;
 const APPLY_SCOPE_PAGE = 'page';
 const APPLY_SCOPE_SELECTION = 'selection';
+const KEY_MODE_DIRECT = 'direct';
+const KEY_MODE_FRAME = 'frame';
 const loadedFontCache = new Set();
 const unavailableFontCache = new Map();
 
@@ -14,6 +16,15 @@ function keyFromNodeName(name) {
   if (!name || name[0] !== '*') return null;
   var key = name.slice(1).trim();
   return key.length > 0 ? key : null;
+}
+
+function namespaceFromNodeName(name) {
+  var namespace = String(name || '').trim();
+  if (!namespace) return null;
+  if (namespace[0] === '*') {
+    namespace = namespace.slice(1).trim();
+  }
+  return namespace || null;
 }
 
 function ensureNestedValue(target, dotKey, value) {
@@ -252,6 +263,22 @@ function normalizeApplyScope(scope) {
   return scope === APPLY_SCOPE_SELECTION ? APPLY_SCOPE_SELECTION : APPLY_SCOPE_PAGE;
 }
 
+function normalizeKeyMode(mode) {
+  return mode === KEY_MODE_FRAME ? KEY_MODE_FRAME : KEY_MODE_DIRECT;
+}
+
+function resolveTopLevelFrameNamespace(node) {
+  var current = node ? node.parent : null;
+  var topLevelNode = null;
+
+  while (current && current.type !== 'PAGE' && current.type !== 'DOCUMENT') {
+    topLevelNode = current;
+    current = current.parent;
+  }
+
+  return topLevelNode ? namespaceFromNodeName(topLevelNode.name) : null;
+}
+
 function normalizeSelectionRoots(selection) {
   var selectedIds = new Set();
   for (var i = 0; i < selection.length; i += 1) {
@@ -368,9 +395,25 @@ function cacheAncestorResolution(visitedAncestors, resolution, cache) {
   }
 }
 
-function resolveKeyForTextNode(node, descendantCountCache, ancestorResolutionCache) {
+function resolveKeyForTextNode(node, descendantCountCache, ancestorResolutionCache, keyMode) {
+  var normalizedKeyMode = normalizeKeyMode(keyMode);
   var directKey = keyFromNodeName(node.name);
-  if (directKey) return { type: 'direct', key: directKey };
+  if (directKey) {
+    if (normalizedKeyMode === KEY_MODE_FRAME) {
+      var frameNamespace = resolveTopLevelFrameNamespace(node);
+      if (!frameNamespace) {
+        return { type: 'missing-screen-frame', key: directKey };
+      }
+
+      var prefixedKey =
+        directKey.indexOf(frameNamespace + '.') === 0
+          ? directKey
+          : frameNamespace + '.' + directKey;
+      return { type: 'direct', key: prefixedKey };
+    }
+
+    return { type: 'direct', key: directKey };
+  }
 
   var visitedAncestors = [];
   var current = node.parent;
@@ -417,6 +460,7 @@ function createApplyResult(totalTextNodes, scope, selectionInfo) {
     applyScope: scope,
     skippedMissingKey: 0,
     skippedMissingValue: 0,
+    skippedMissingScreenFrame: 0,
     skippedAmbiguousAncestor: 0,
     skippedFontLoad: 0,
     fontLoadErrors: [],
@@ -459,7 +503,7 @@ function resolveApplyTargets(scope) {
   };
 }
 
-function buildApplyPlan(textNodes, lang, scope, selectionInfo) {
+function buildApplyPlan(textNodes, lang, scope, selectionInfo, keyMode) {
   var result = createApplyResult(textNodes.length, scope, selectionInfo);
   var updates = [];
   var descendantCountCache = new Map();
@@ -467,11 +511,27 @@ function buildApplyPlan(textNodes, lang, scope, selectionInfo) {
   var warnedAmbiguousAncestorIds = new Set();
   var missingKeySamples = [];
   var missingValueSamples = [];
+  var missingScreenFrameSamples = [];
 
   for (var i = 0; i < textNodes.length; i += 1) {
     var node = textNodes[i];
-    var resolvedKey = resolveKeyForTextNode(node, descendantCountCache, ancestorResolutionCache);
+    var resolvedKey = resolveKeyForTextNode(
+      node,
+      descendantCountCache,
+      ancestorResolutionCache,
+      keyMode
+    );
     if (resolvedKey.type === 'missing-key') continue;
+    if (resolvedKey.type === 'missing-screen-frame') {
+      result.skippedMissingScreenFrame += 1;
+      if (pushUniqueSample(missingScreenFrameSamples, resolvedKey.key)) {
+        console.warn(
+          '[i18n] Frame key mode requires a named top-level frame for direct key: ' +
+          resolvedKey.key
+        );
+      }
+      continue;
+    }
     if (resolvedKey.type === 'ambiguous-ancestor') {
       result.skippedAmbiguousAncestor += 1;
       if (!warnedAmbiguousAncestorIds.has(resolvedKey.ownerId)) {
@@ -622,11 +682,13 @@ async function applyTranslations(lang, options) {
     throw new Error('The current selection does not include any text nodes.');
   }
 
+  var keyMode = normalizeKeyMode(options && options.keyMode);
   var applyPlan = buildApplyPlan(
     applyTargets.textNodes,
     lang,
     applyTargets.scope,
-    applyTargets.selectionInfo
+    applyTargets.selectionInfo,
+    keyMode
   );
   if (applyPlan.updates.length === 0) return applyPlan.result;
 
@@ -716,12 +778,13 @@ figma.ui.onmessage = async function (msg) {
       var applyPayload = msg && msg.payload ? msg.payload : {};
       var lang = String(applyPayload.lang || '').trim();
       var scope = normalizeApplyScope(applyPayload.scope);
+      var keyMode = normalizeKeyMode(applyPayload.keyMode);
       if (!lang) {
         figma.ui.postMessage({ type: 'error', payload: 'Please select a language.' });
         return;
       }
 
-      var applyResult = await applyTranslations(lang, { scope: scope });
+      var applyResult = await applyTranslations(lang, { scope: scope, keyMode: keyMode });
       var notifyMessage =
         'Applied ' +
         applyResult.appliedCount +
@@ -732,6 +795,10 @@ figma.ui.onmessage = async function (msg) {
         ').';
       if (applyResult.applyScope === APPLY_SCOPE_SELECTION) {
         notifyMessage += ' Selection scope.';
+      }
+      if (applyResult.skippedMissingScreenFrame > 0) {
+        notifyMessage +=
+          ' Skipped ' + applyResult.skippedMissingScreenFrame + ' without a top-level frame.';
       }
       if (applyResult.skippedFontLoad > 0) {
         notifyMessage += ' Skipped ' + applyResult.skippedFontLoad + ' due to unavailable fonts.';
