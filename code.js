@@ -267,16 +267,43 @@ function normalizeKeyMode(mode) {
   return mode === KEY_MODE_FRAME ? KEY_MODE_FRAME : KEY_MODE_DIRECT;
 }
 
-function resolveTopLevelFrameNamespace(node) {
+function isFrameNamespaceCandidate(namespace) {
+  return !!(
+    namespace &&
+    namespace.indexOf('.') > 0 &&
+    namespace[namespace.length - 1] !== '.'
+  );
+}
+
+function resolveFrameNamespace(node) {
   var current = node ? node.parent : null;
-  var topLevelNode = null;
 
   while (current && current.type !== 'PAGE' && current.type !== 'DOCUMENT') {
-    topLevelNode = current;
+    var namespace = namespaceFromNodeName(current.name);
+
+    // 예: ez.join.idCardCamera
+    // Section / Group / Wrapper 같은 상위 노드가 있어도
+    // 가장 가까운 dot namespace 조상을 프레임 key prefix로 사용한다.
+    if (isFrameNamespaceCandidate(namespace)) {
+      return namespace;
+    }
+
     current = current.parent;
   }
 
-  return topLevelNode ? namespaceFromNodeName(topLevelNode.name) : null;
+  return null;
+}
+
+function resolveFrameKey(node, key) {
+  var frameNamespace = resolveFrameNamespace(node);
+
+  if (!frameNamespace) {
+    return null;
+  }
+
+  return key.indexOf(frameNamespace + '.') === 0
+    ? key
+    : frameNamespace + '.' + key;
 }
 
 function normalizeSelectionRoots(selection) {
@@ -398,17 +425,21 @@ function cacheAncestorResolution(visitedAncestors, resolution, cache) {
 function resolveKeyForTextNode(node, descendantCountCache, ancestorResolutionCache, keyMode) {
   var normalizedKeyMode = normalizeKeyMode(keyMode);
   var directKey = keyFromNodeName(node.name);
+
+  // Case 1. 텍스트 노드 자체가 *key 인 경우
+  // 예:
+  // ez.join.idCardCamera
+  // └─ *title
+  //
+  // frame mode => ez.join.idCardCamera.title
   if (directKey) {
     if (normalizedKeyMode === KEY_MODE_FRAME) {
-      var frameNamespace = resolveTopLevelFrameNamespace(node);
-      if (!frameNamespace) {
+      var prefixedKey = resolveFrameKey(node, directKey);
+
+      if (!prefixedKey) {
         return { type: 'missing-screen-frame', key: directKey };
       }
 
-      var prefixedKey =
-        directKey.indexOf(frameNamespace + '.') === 0
-          ? directKey
-          : frameNamespace + '.' + directKey;
       return { type: 'direct', key: prefixedKey };
     }
 
@@ -417,20 +448,60 @@ function resolveKeyForTextNode(node, descendantCountCache, ancestorResolutionCac
 
   var visitedAncestors = [];
   var current = node.parent;
+
   while (current && current.type !== 'PAGE' && current.type !== 'DOCUMENT') {
     var cached = ancestorResolutionCache.get(current.id);
+
     if (cached) {
       cacheAncestorResolution(visitedAncestors, cached, ancestorResolutionCache);
       return cached;
     }
 
     visitedAncestors.push(current);
+
     var ancestorKey = keyFromNodeName(current.name);
+
     if (ancestorKey) {
       var descendantCount = countTextDescendants(current, descendantCountCache);
+
+      // Case 2. 부모/조상 레이어가 *key 이고, 하위 text가 1개인 경우
+      // 예:
+      // ez.join.idCardCamera
+      // └─ *title
+      //    └─ Text
+      //
+      // frame mode => ez.join.idCardCamera.title
       if (descendantCount === 1) {
-        var singleResolution = { type: 'ancestor', key: ancestorKey, ownerId: current.id };
+        var resolvedAncestorKey = ancestorKey;
+
+        if (normalizedKeyMode === KEY_MODE_FRAME) {
+          resolvedAncestorKey = resolveFrameKey(node, ancestorKey);
+
+          if (!resolvedAncestorKey) {
+            var missingFrameResolution = {
+              type: 'missing-screen-frame',
+              key: ancestorKey,
+              ownerId: current.id,
+            };
+
+            cacheAncestorResolution(
+              visitedAncestors,
+              missingFrameResolution,
+              ancestorResolutionCache
+            );
+
+            return missingFrameResolution;
+          }
+        }
+
+        var singleResolution = {
+          type: 'ancestor',
+          key: resolvedAncestorKey,
+          ownerId: current.id,
+        };
+
         cacheAncestorResolution(visitedAncestors, singleResolution, ancestorResolutionCache);
+
         return singleResolution;
       }
 
@@ -440,7 +511,9 @@ function resolveKeyForTextNode(node, descendantCountCache, ancestorResolutionCac
         ownerId: current.id,
         descendantCount: descendantCount,
       };
+
       cacheAncestorResolution(visitedAncestors, ambiguousResolution, ancestorResolutionCache);
+
       return ambiguousResolution;
     }
 
@@ -448,7 +521,9 @@ function resolveKeyForTextNode(node, descendantCountCache, ancestorResolutionCac
   }
 
   var missingResolution = { type: 'missing-key' };
+
   cacheAncestorResolution(visitedAncestors, missingResolution, ancestorResolutionCache);
+
   return missingResolution;
 }
 
