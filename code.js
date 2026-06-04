@@ -1,4 +1,4 @@
-figma.showUI(__html__, { width: 440, height: 460 });
+figma.showUI(__html__, { width: 560, height: 700 });
 
 let translations = {};
 let availableLanguages = [];
@@ -889,7 +889,24 @@ figma.ui.onmessage = async function (msg) {
         return;
       }
 
-      var langs = availableLanguages.length > 0 ? availableLanguages : Object.keys(Object.values(translations)[0] || {});
+      var allLangs = availableLanguages.length > 0 ? availableLanguages : Object.keys(Object.values(translations)[0] || {});
+      var requestedLangs =
+        msg && msg.payload && Array.isArray(msg.payload.languages) ? msg.payload.languages : [];
+      var langs = [];
+      if (requestedLangs.length > 0) {
+        for (var requestedIndex = 0; requestedIndex < requestedLangs.length; requestedIndex += 1) {
+          var requestedLang = String(requestedLangs[requestedIndex] || '').trim();
+          if (requestedLang && allLangs.indexOf(requestedLang) >= 0 && langs.indexOf(requestedLang) < 0) {
+            langs.push(requestedLang);
+          }
+        }
+      } else {
+        langs = allLangs.slice();
+      }
+      if (langs.length === 0) {
+        figma.ui.postMessage({ type: 'error', payload: '내보낼 언어를 선택해 주세요.' });
+        return;
+      }
       var files = {};
       for (var i = 0; i < langs.length; i += 1) {
         var exportLang = langs[i];

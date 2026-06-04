@@ -45,7 +45,7 @@
       .plugin {
         display: flex;
         flex-direction: column;
-        min-height: 500px;
+        min-height: 100vh;
       }
       .header {
         padding: 14px 16px 13px;
@@ -243,16 +243,70 @@
       }
       .actions {
         display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
+        grid-template-columns: minmax(0, 6fr) minmax(0, 4fr);
         gap: 6px;
         padding: 11px 12px;
         background: var(--bg);
         border-top: 0.5px solid var(--border);
       }
+      .export-actions {
+        position: relative;
+        min-width: 0;
+      }
+      .export-actions > .btn {
+        width: 100%;
+      }
+      .export-panel {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 25;
+        width: 280px;
+        max-width: calc(100vw - 24px);
+        padding: 10px;
+        border-radius: 8px;
+        border: 0.5px solid var(--border2);
+        background: var(--white);
+        box-shadow: 0 18px 36px rgba(28, 25, 23, 0.15);
+      }
+      .export-panel[hidden] {
+        display: none;
+      }
+      .export-panel-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .export-panel .sel-wrap {
+        margin-top: 6px;
+      }
+      .export-panel .btn {
+        padding: 0 10px;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .export-actions .btn {
+        padding: 0 10px;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .btn-sm {
+        height: 26px;
+        padding: 0 10px;
+        font-size: 10.5px;
+      }
+      .tbl-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
       .tbl-bar {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 8px;
         padding: 9px 13px 8px;
         background: var(--white);
         border-radius: 10px 10px 0 0;
@@ -320,11 +374,75 @@
         font-family: monospace;
         font-size: 10px;
       }
+      th.key-col,
+      td.key-col {
+        max-width: 40%;
+      }
       .empty-state {
         text-align: center;
         padding: 28px 12px;
         color: var(--txt3);
         font-size: 11px;
+      }
+      .detail-root {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: flex;
+        padding: 12px;
+        background: rgba(28, 25, 23, 0.34);
+        backdrop-filter: blur(3px);
+      }
+      .detail-root[hidden] {
+        display: none;
+      }
+      .detail-panel {
+        width: 100%;
+        max-height: calc(100vh - 24px);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border-radius: 10px;
+        border: 0.5px solid var(--border2);
+        background: var(--white);
+        box-shadow: 0 24px 48px rgba(28, 25, 23, 0.16);
+      }
+      .detail-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 13px;
+        border-bottom: 0.5px solid var(--border);
+        background: var(--bg);
+      }
+      .detail-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--txt);
+      }
+      .detail-sub {
+        margin-top: 1px;
+        font-size: 10px;
+        color: var(--txt3);
+      }
+      .detail-close {
+        display: inline-flex;
+      }
+      .detail-controls {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(118px, 0.65fr);
+        gap: 7px;
+        padding: 10px 13px;
+        border-bottom: 0.5px solid var(--border);
+      }
+      .detail-table-wrap {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+      }
+      .detail-table {
+        min-width: 100%;
       }
       .statusbar {
         display: flex;
@@ -456,6 +574,9 @@
       .toast-root.err .toast-close {
         display: inline-flex;
       }
+      .toast-close.detail-close {
+        display: inline-flex;
+      }
       .toast-body {
         padding: 0 15px 14px;
       }
@@ -533,7 +654,7 @@
           <div class="header-name">시트 i18n 동기화</div>
           <div class="header-desc">번역 데이터 동기화</div>
         </div>
-        <span class="header-badge">1.0.1</span>
+        <span class="header-badge">1.0.2</span>
       </div>
       <div class="body">
         <div class="card">
@@ -556,8 +677,8 @@
               hidden
             />
             <div class="hint">
-            <code>key</code> 컬럼이 포함된 XLSX 파일을
-              업로드하세요.
+              Google Sheets URL/ID를 입력하고 새로고침하거나
+              <code>key</code> 컬럼이 포함된 XLSX 파일을 업로드하세요.
             </div>
           </div>
         </div>
@@ -611,14 +732,32 @@
             </div>
           </div>
           <div class="actions">
-            <button id="fetchBtn" class="btn btn-v">불러오기</button
-            ><button id="applyBtn" class="btn">적용</button
-            ><button id="exportBtn" class="btn">내보내기</button>
+            <button id="applyBtn" class="btn btn-v">적용</button>
+            <div class="export-actions">
+              <button id="exportBtn" class="btn">json 파일로 내보내기</button>
+              <div id="exportPanel" class="export-panel" hidden aria-hidden="true">
+                <div class="field-label">내보낼 언어</div>
+                <div class="sel-wrap">
+                  <select id="exportLang">
+                    <option value="__all__">전체 언어</option>
+                  </select>
+                </div>
+                <div class="export-panel-actions">
+                  <button id="exportCancelBtn" class="btn" type="button">취소</button>
+                  <button id="exportConfirmBtn" class="btn btn-v" type="button">
+                    내보내기
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="tbl-bar" style="margin-top: 6px">
-          <p class="tbl-label">데이터 미리보기</p>
-          <span id="keyCnt" class="tbl-count" style="display: none"></span>
+          <div class="tbl-title">
+            <p class="tbl-label">데이터 미리보기</p>
+            <span id="keyCnt" class="tbl-count" style="display: none"></span>
+          </div>
+          <button id="detailBtn" class="btn btn-sm" type="button">자세히보기</button>
         </div>
         <div class="tbl-bar" style="border-radius: 0;">
             <p class="tbl-label">미리보기 언어</p>
@@ -640,6 +779,53 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+        <div id="detailRoot" class="detail-root" hidden aria-hidden="true">
+          <div
+            class="detail-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="detailTitle"
+          >
+            <div class="detail-head">
+              <div>
+                <div id="detailTitle" class="detail-title">다국어 목록</div>
+                <div id="detailCount" class="detail-sub">0개</div>
+              </div>
+              <button
+                id="detailCloseBtn"
+                class="toast-close detail-close"
+                type="button"
+                aria-label="상세 보기 닫기"
+              >
+                ×
+              </button>
+            </div>
+            <div class="detail-controls">
+              <input id="detailSearch" type="text" placeholder="검색" />
+              <div class="sel-wrap">
+                <select id="detailLang">
+                  <option value="__all__">전체 언어</option>
+                </select>
+              </div>
+            </div>
+            <div class="detail-table-wrap">
+              <table class="detail-table">
+                <thead>
+                  <tr id="detailHead">
+                    <th class="key-col" style="width: 40%">키</th>
+                  </tr>
+                </thead>
+                <tbody id="detailBody">
+                  <tr>
+                    <td colspan="4" class="empty-state">
+                      번역 데이터를 불러오면 다국어 목록이 표시됩니다
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
         <div id="statusEl" class="statusbar">
@@ -676,7 +862,6 @@
     <script>
       const MH = 10;
       const TOAST_OK_DURATION = 2600;
-      let pendingApplyRequest = null;
       let historyCache = [];
       let previewLangs = [];
       let currentData = { translations: {}, languages: [] };
@@ -690,6 +875,7 @@
       const HISTORY_SOURCE_FILE = "file";
       const GOOGLE_SHEETS_TIMEOUT_MS = 10000;
       const XLSX_ACCEPTED_EXTENSIONS = [".xlsx"];
+      const ALL_LANGS_VALUE = "__all__";
       const UTF8_DECODER = new TextDecoder("utf-8");
       const $ = (id) => document.getElementById(id);
       const sUrl = $("sheetUrl"),
@@ -710,12 +896,23 @@
         toastMessageEl = $("toastMessage"),
         toastCloseBtn = $("toastCloseBtn"),
         toastActionBtn = $("toastActionBtn");
-      const fetchBtn = $("fetchBtn"),
-        applyBtn = $("applyBtn"),
-        exportBtn = $("exportBtn");
+      const applyBtn = $("applyBtn"),
+        exportBtn = $("exportBtn"),
+        exportPanel = $("exportPanel"),
+        exportLangSel = $("exportLang"),
+        exportCancelBtn = $("exportCancelBtn"),
+        exportConfirmBtn = $("exportConfirmBtn");
       const thead = $("tableHead"),
         tbody = $("tableBody"),
-        keyCnt = $("keyCnt");
+        keyCnt = $("keyCnt"),
+        detailBtn = $("detailBtn"),
+        detailRoot = $("detailRoot"),
+        detailCloseBtn = $("detailCloseBtn"),
+        detailSearch = $("detailSearch"),
+        detailLangSel = $("detailLang"),
+        detailCount = $("detailCount"),
+        detailHead = $("detailHead"),
+        detailBody = $("detailBody");
       function clearToastTimer() {
         if (!toastTimer) return;
         clearTimeout(toastTimer);
@@ -772,6 +969,63 @@
         const hasSelectionText = selectionInfo.selectedTextNodeCount > 0;
         applyBtn.disabled = !hasLang || (isSelectionScope && !hasSelectionText);
       }
+      function getCurrentTranslationKeys() {
+        return Object.keys((currentData && currentData.translations) || {});
+      }
+      function hasCurrentData() {
+        return getCurrentTranslationKeys().length > 0;
+      }
+      function updateDataActionState() {
+        const hasData = hasCurrentData();
+        const hasLangs =
+          currentData &&
+          Array.isArray(currentData.languages) &&
+          currentData.languages.length > 0;
+        exportBtn.disabled = !hasData;
+        exportLangSel.disabled = !hasData || !hasLangs;
+        exportConfirmBtn.disabled = !hasData;
+        if (!hasData) closeExportPanel();
+        detailBtn.disabled = !hasData;
+      }
+      function renderLanguageOptions(selectEl, languages, allLabel, previousValue) {
+        const selectedBefore =
+          previousValue == null ? selectEl.value || ALL_LANGS_VALUE : previousValue;
+        selectEl.innerHTML = "";
+
+        const allOption = document.createElement("option");
+        allOption.value = ALL_LANGS_VALUE;
+        allOption.textContent = allLabel;
+        selectEl.appendChild(allOption);
+
+        languages.forEach((language) => {
+          const option = document.createElement("option");
+          option.value = language;
+          option.textContent = language;
+          selectEl.appendChild(option);
+        });
+
+        selectEl.value =
+          selectedBefore === ALL_LANGS_VALUE ||
+          languages.indexOf(selectedBefore) >= 0
+            ? selectedBefore
+            : ALL_LANGS_VALUE;
+      }
+      function renderExportLangOptions(languages) {
+        renderLanguageOptions(
+          exportLangSel,
+          languages,
+          "전체 언어",
+          exportLangSel.value,
+        );
+      }
+      function renderDetailLangOptions(languages) {
+        renderLanguageOptions(
+          detailLangSel,
+          languages,
+          "전체 언어",
+          detailLangSel.value,
+        );
+      }
       function renderScopeHint() {
         if (applyScopeSel.value !== "selection") {
           scopeHint.textContent =
@@ -827,6 +1081,7 @@
         };
       }
       function setLangs(langs) {
+        const previousLang = langSel.value;
         langSel.innerHTML = "";
         previewLangs = langs.slice(0, Math.min(3, langs.length));
         for (let i = 0; i < langs.length; i++) {
@@ -836,9 +1091,15 @@
           o.textContent = l;
           langSel.appendChild(o);
         }
+        if (langs.indexOf(previousLang) >= 0) {
+          langSel.value = previousLang;
+        }
+        renderExportLangOptions(langs);
+        renderDetailLangOptions(langs);
         renderPreviewLangPills(langs);
         langHint.style.display = "none";
         updateApplyButtonState();
+        updateDataActionState();
       }
       function renderPreviewLangPills(allLangs) {
         langPillsEl.innerHTML = "";
@@ -1458,22 +1719,55 @@
           setStatus("복사 실패: " + copiedText, "err");
         }
       }
+      function renderTableHead(rowEl, langs, keyWidth) {
+        rowEl.innerHTML = "";
+
+        const keyTh = document.createElement("th");
+        keyTh.className = "key-col";
+        keyTh.style.width = keyWidth + "%";
+        keyTh.textContent = "키";
+        rowEl.appendChild(keyTh);
+
+        const langWidth = langs.length ? (100 - keyWidth) / langs.length : 0;
+        langs.forEach((lang) => {
+          const th = document.createElement("th");
+          th.style.width = langWidth.toFixed(2) + "%";
+          th.textContent = lang;
+          rowEl.appendChild(th);
+        });
+      }
+      function createTranslationRow(key, langs) {
+        const tr = document.createElement("tr");
+        const kt = document.createElement("td");
+        kt.className = "kc key-col";
+        kt.textContent = key;
+        kt.title = "클릭하여 복사";
+        kt.onclick = () => copy(key);
+        tr.appendChild(kt);
+
+        langs.forEach((lang) => {
+          const td = document.createElement("td");
+          td.textContent =
+            (currentData.translations[key] &&
+              currentData.translations[key][lang]) ||
+            "";
+          tr.appendChild(td);
+        });
+
+        return tr;
+      }
       function renderTable(data) {
         currentData = data || { translations: {}, languages: [] };
         const allLangs = currentData.languages || [];
         const langs = previewLangs.length
           ? previewLangs
           : allLangs.slice(0, Math.min(3, allLangs.length));
-        const width = Math.floor(120 / Math.max(langs.length, 1));
-        thead.innerHTML =
-          '<th style="width:40%">키</th>' +
-          langs
-            .map((lang) => '<th style="width:' + width + '%">' + lang + "</th>")
-            .join("");
+        renderTableHead(thead, langs, langs.length ? 40 : 100);
         tbody.innerHTML = "";
         const tableEl = tbody.closest("table");
-        tableEl.style.minWidth = 220 + langs.length * 160 + "px";
-        const keys = Object.keys(currentData.translations || {}).sort();
+        tableEl.style.minWidth =
+          langs.length <= 1 ? "100%" : 220 + langs.length * 160 + "px";
+        const keys = getCurrentTranslationKeys().sort();
         if (keys.length) {
           keyCnt.textContent = keys.length + "개";
           keyCnt.style.display = "";
@@ -1483,26 +1777,132 @@
         if (!keys.length) {
           tbody.innerHTML =
             '<tr><td colspan="10" class="empty-state">번역 데이터가 없습니다</td></tr>';
+          updateDataActionState();
+          renderDetailTable();
           return;
         }
         keys.forEach((key) => {
-          const tr = document.createElement("tr");
-          const kt = document.createElement("td");
-          kt.className = "kc";
-          kt.textContent = key;
-          kt.title = "클릭하여 복사";
-          kt.onclick = () => copy(key);
-          tr.appendChild(kt);
-          langs.forEach((lang) => {
-            const td = document.createElement("td");
-            td.textContent =
-              (currentData.translations[key] &&
-                currentData.translations[key][lang]) ||
-              "";
-            tr.appendChild(td);
-          });
-          tbody.appendChild(tr);
+          tbody.appendChild(createTranslationRow(key, langs));
         });
+        updateDataActionState();
+        renderDetailTable();
+      }
+      function getDetailLangs() {
+        const allLangs =
+          currentData && Array.isArray(currentData.languages)
+            ? currentData.languages
+            : [];
+        const selected = detailLangSel.value;
+        if (selected && selected !== ALL_LANGS_VALUE) {
+          return allLangs.indexOf(selected) >= 0 ? [selected] : [];
+        }
+        return allLangs;
+      }
+      function matchesDetailSearch(key, langs, query) {
+        if (!query) return true;
+
+        if (String(key).toLowerCase().indexOf(query) >= 0) return true;
+
+        const entry =
+          currentData && currentData.translations
+            ? currentData.translations[key] || {}
+            : {};
+        return langs.some((lang) =>
+          String(entry[lang] || "")
+            .toLowerCase()
+            .includes(query),
+        );
+      }
+      function renderDetailTable() {
+        const langs = getDetailLangs();
+        const query = String(detailSearch.value || "")
+          .trim()
+          .toLowerCase();
+        const keys = getCurrentTranslationKeys().sort();
+        const visibleKeys = keys.filter((key) =>
+          matchesDetailSearch(key, langs, query),
+        );
+
+        renderTableHead(detailHead, langs, langs.length ? 40 : 100);
+        detailBody.innerHTML = "";
+        detailBody.closest("table").style.minWidth =
+          langs.length <= 1 ? "100%" : Math.max(620, 220 + langs.length * 170) + "px";
+        detailCount.textContent = visibleKeys.length + " / " + keys.length + "개";
+
+        if (!keys.length) {
+          detailBody.innerHTML =
+            '<tr><td colspan="10" class="empty-state">번역 데이터가 없습니다</td></tr>';
+          return;
+        }
+
+        if (!visibleKeys.length) {
+          detailBody.innerHTML =
+            '<tr><td colspan="10" class="empty-state">검색 결과가 없습니다</td></tr>';
+          return;
+        }
+
+        visibleKeys.forEach((key) => {
+          detailBody.appendChild(createTranslationRow(key, langs));
+        });
+      }
+      function openDetailView() {
+        if (!hasCurrentData()) return;
+        closeExportPanel();
+        renderDetailTable();
+        detailRoot.hidden = false;
+        detailRoot.setAttribute("aria-hidden", "false");
+        detailSearch.focus();
+      }
+      function closeDetailView() {
+        detailRoot.hidden = true;
+        detailRoot.setAttribute("aria-hidden", "true");
+      }
+      function updateExportPanelPosition() {
+        const rect = exportBtn.getBoundingClientRect();
+        const margin = 12;
+        const panelWidth = Math.min(280, window.innerWidth - margin * 2);
+        const panelHeight = exportPanel.offsetHeight || 0;
+        const left = Math.min(
+          Math.max(margin, rect.right - panelWidth),
+          window.innerWidth - panelWidth - margin,
+        );
+        const belowTop = rect.bottom + 7;
+        const maxTop = Math.max(margin, window.innerHeight - panelHeight - margin);
+        const top = Math.min(
+          Math.max(margin, belowTop),
+          maxTop,
+        );
+
+        exportPanel.style.width = panelWidth + "px";
+        exportPanel.style.left = left + "px";
+        exportPanel.style.top = top + "px";
+      }
+      function openExportPanel() {
+        if (!hasCurrentData()) return;
+        exportPanel.hidden = false;
+        exportPanel.setAttribute("aria-hidden", "false");
+        updateExportPanelPosition();
+        exportLangSel.focus();
+      }
+      function closeExportPanel() {
+        exportPanel.hidden = true;
+        exportPanel.setAttribute("aria-hidden", "true");
+      }
+      function requestJsonExport() {
+        const selectedLang = exportLangSel.value;
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "export-json",
+              payload:
+                selectedLang && selectedLang !== ALL_LANGS_VALUE
+                  ? { languages: [selectedLang] }
+                  : {},
+            },
+          },
+          "*",
+        );
+        closeExportPanel();
       }
       function send(data) {
         parent.postMessage(
@@ -1514,14 +1914,6 @@
         setLangs(data.languages || []);
         renderTable(data);
         send(data);
-      }
-      function queueApplyAfterDataLoad(data) {
-        const languages = data && Array.isArray(data.languages) ? data.languages : [];
-        pendingApplyRequest = {
-          lang: langSel.value || languages[0] || "",
-          scope: applyScopeSel.value || "page",
-          keyMode: keyModeSel.value || "direct",
-        };
       }
       function openXlsxPicker() {
         if (typeof xlsxInput.showPicker === "function") {
@@ -1570,17 +1962,10 @@
           xlsxInput.value = "";
         }
       };
-      fetchBtn.onclick = async () => {
-        const request = resolveSheetFetchRequest();
-        if (!request) {
-          setStatus(
-            "데이터를 입력하거나 저장된 이력을 선택하세요.",
-            "err",
-          );
-          return;
-        }
-
-        setStatus("데이터를 불러오는 중…");
+      async function refreshGoogleSheetData(request, fallbackRecord) {
+        setStatus(
+          fallbackRecord ? "최신 데이터를 다시 불러오는 중…" : "데이터를 불러오는 중…",
+        );
         try {
           const data = await loadTranslationsFromGoogleSheets(request);
           presentLoadedData(data);
@@ -1590,65 +1975,55 @@
             sourceType: HISTORY_SOURCE_SHEET,
             label: request.label,
             gid: request.gid,
-            count: Object.keys(data.translations).length,
+            count: Object.keys(data.translations || {}).length,
             fetchedAt: Date.now(),
             data: data,
           };
           upsertHistory(record);
           setStatus(
-            "불러옴: " +
-              record.count +
-              "개 키 / " +
-              record.label +
-              " 스냅샷 저장 완료.",
+            (fallbackRecord ? "최신 데이터 동기화 완료: " : "불러옴: ") +
+              (fallbackRecord
+                ? record.label
+                : record.count +
+                  "개 키 / " +
+                  record.label +
+                  " 스냅샷 저장 완료."),
             "ok",
           );
         } catch (error) {
+          if (fallbackRecord && fallbackRecord.data) {
+            setStatus(
+              "최신 데이터 불러오기에 실패하여 저장된 데이터를 사용합니다. " +
+                ((error && error.message) || ""),
+              "err",
+            );
+            presentLoadedData(fallbackRecord.data);
+            return;
+          }
           setStatus((error && error.message) || "데이터를 불러오지 못했습니다.", "err");
         }
-      };
+      }
       syncBtn.onclick = async () => {
+        const request = resolveSheetFetchRequest();
+        if (request) {
+          await refreshGoogleSheetData(
+            request,
+            request.historyId ? getHistoryById(request.historyId) : null,
+          );
+          return;
+        }
+
         const record = getHistoryById(hist.value);
         if (!(record && record.data)) {
-          setStatus("선택된 저장 데이터가 없습니다.", "err");
+          setStatus("데이터를 입력하거나 저장된 이력을 선택하세요.", "err");
           return;
         }
 
         if (createHistorySourceType(record) === HISTORY_SOURCE_FILE) {
           setStatus("저장된 XLSX 스냅샷을 불러오는 중…");
-          queueApplyAfterDataLoad(record.data);
           presentLoadedData(record.data);
+          setStatus("저장된 XLSX 스냅샷을 불러왔습니다.", "ok");
           return;
-        }
-
-        setStatus("최신 데이터를 다시 불러오는 중…");
-        try {
-          const latest = await loadTranslationsFromGoogleSheets({
-            id: record.label,
-            gid: record.gid || "0",
-          });
-          queueApplyAfterDataLoad(latest);
-          presentLoadedData(latest);
-
-          const refreshed = {
-            id: record.id,
-            sourceType: HISTORY_SOURCE_SHEET,
-            label: record.label,
-            gid: record.gid || "0",
-            count: Object.keys(latest.translations || {}).length,
-            fetchedAt: Date.now(),
-            data: latest,
-          };
-          upsertHistory(refreshed);
-          setStatus("최신 데이터 동기화 완료: " + record.label, "ok");
-        } catch (error) {
-          setStatus(
-            "최신 데이터 불러오기에 실패하여 저장된 데이터를 사용합니다. " +
-              ((error && error.message) || ""),
-            "err",
-          );
-          queueApplyAfterDataLoad(record.data);
-          presentLoadedData(record.data);
         }
       };
       applyBtn.onclick = () => {
@@ -1673,8 +2048,42 @@
           "*",
         );
       };
-      exportBtn.onclick = () =>
-        parent.postMessage({ pluginMessage: { type: "export-json" } }, "*");
+      exportBtn.onclick = (event) => {
+        event.stopPropagation();
+        if (exportPanel.hidden) {
+          openExportPanel();
+        } else {
+          closeExportPanel();
+        }
+      };
+      exportCancelBtn.onclick = closeExportPanel;
+      exportConfirmBtn.onclick = requestJsonExport;
+      exportPanel.onclick = (event) => {
+        event.stopPropagation();
+      };
+      document.addEventListener("click", () => {
+        closeExportPanel();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeExportPanel();
+      });
+      window.addEventListener("resize", () => {
+        if (!exportPanel.hidden) updateExportPanelPosition();
+      });
+      document.addEventListener(
+        "scroll",
+        () => {
+          if (!exportPanel.hidden) updateExportPanelPosition();
+        },
+        true,
+      );
+      detailBtn.onclick = openDetailView;
+      detailCloseBtn.onclick = closeDetailView;
+      detailSearch.oninput = renderDetailTable;
+      detailLangSel.onchange = renderDetailTable;
+      detailRoot.onclick = (event) => {
+        if (event.target === detailRoot) closeDetailView();
+      };
       onmessage = (e) => {
         const msg = e.data.pluginMessage;
         if (!msg) return;
@@ -1699,19 +2108,6 @@
             : [];
           if (langs.length) setLangs(langs);
           setStatus(msg.payload.count + "개 키를 불러왔습니다.", "ok");
-          if (pendingApplyRequest) {
-            const nextApply = pendingApplyRequest;
-            pendingApplyRequest = null;
-            parent.postMessage(
-              {
-                pluginMessage: {
-                  type: "apply-translations",
-                  payload: nextApply,
-                },
-              },
-              "*",
-            );
-          }
           return;
         }
         if (msg.type === "apply-result") {
@@ -1786,7 +2182,10 @@
         }
       };
       renderHistory();
+      renderExportLangOptions([]);
+      renderDetailLangOptions([]);
       renderScopeHint();
+      updateDataActionState();
       parent.postMessage({ pluginMessage: { type: "get-history" } }, "*");
       parent.postMessage({ pluginMessage: { type: "get-selection-info" } }, "*");
     </script>
