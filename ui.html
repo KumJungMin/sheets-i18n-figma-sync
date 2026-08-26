@@ -890,6 +890,8 @@
       const GOOGLE_SHEETS_TIMEOUT_MS = 10000;
       const XLSX_ACCEPTED_EXTENSIONS = [".xlsx"];
       const MAX_XLSX_SHEETS = 3;
+      const MAX_XLSX_HISTORY_FILES = 3;
+      const MAX_XLSX_HISTORY_BYTES_PER_FILE = 500 * 1024;
       const ALL_LANGS_VALUE = "__all__";
       const UTF8_DECODER = new TextDecoder("utf-8");
       const $ = (id) => document.getElementById(id);
@@ -981,10 +983,13 @@
       toastCard.onclick = (event) => {
         event.stopPropagation();
       };
+      function isUsableXlsxSheet(sheet) {
+        return !!(sheet && sheet.data && sheet.status !== "invalid");
+      }
       function updateXlsxSheetControlState() {
         const validSheetCount =
           xlsxSession && Array.isArray(xlsxSession.sheets)
-            ? xlsxSession.sheets.filter((sheet) => sheet.status === "valid").length
+            ? xlsxSession.sheets.filter(isUsableXlsxSheet).length
             : 0;
         xlsxSheetSel.disabled = isXlsxLoading || validSheetCount <= 1;
       }
@@ -1374,8 +1379,59 @@
           "개"
         );
       }
+      function normalizeXlsxHistoryRecord(record) {
+        if (createHistorySourceType(record) !== HISTORY_SOURCE_FILE) return record;
+        if (Array.isArray(record.sheets)) {
+          return {
+            ...record,
+            sheets: record.sheets.map((sheet) => ({
+              ...sheet,
+              status: isUsableXlsxSheet(sheet) ? "valid" : "invalid",
+            })),
+          };
+        }
+        if (!record.data) return record;
+
+        const sourceMeta = record.sourceMeta || {};
+        const sheetId = "legacy-sheet";
+        return {
+          ...record,
+          version: 2,
+          activeSheetId: sheetId,
+          sheets: [
+            {
+              id: sheetId,
+              name: sourceMeta.sheetName || "워크시트",
+              status: "valid",
+              data: record.data,
+              error: null,
+            },
+          ],
+        };
+      }
+      function pruneHistory(list) {
+        const normalized = list.map(normalizeXlsxHistoryRecord);
+        const xlsxRecords = normalized
+          .filter((record) => createHistorySourceType(record) === HISTORY_SOURCE_FILE)
+          .sort((a, b) => (b.fetchedAt || 0) - (a.fetchedAt || 0))
+          .slice(0, MAX_XLSX_HISTORY_FILES);
+        const sheetRecords = normalized
+          .filter((record) => createHistorySourceType(record) !== HISTORY_SOURCE_FILE)
+          .sort((a, b) => (b.fetchedAt || 0) - (a.fetchedAt || 0))
+          .slice(0, MH);
+        return xlsxRecords
+          .concat(sheetRecords)
+          .sort((a, b) => (b.fetchedAt || 0) - (a.fetchedAt || 0));
+      }
+      function getJsonByteSize(value) {
+        return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+      }
+      function formatByteSize(bytes) {
+        if (bytes < 1024) return bytes + "B";
+        return Math.ceil(bytes / 1024) + "KB";
+      }
       function saveHistory(list) {
-        historyCache = list.slice(0, MH);
+        historyCache = pruneHistory(list);
         parent.postMessage(
           {
             pluginMessage: {
@@ -2049,8 +2105,8 @@
           const option = document.createElement("option");
           option.value = sheet.id;
           option.textContent =
-            sheet.name + (sheet.status === "valid" ? "" : " (사용 불가)");
-          option.disabled = sheet.status !== "valid";
+            sheet.name + (isUsableXlsxSheet(sheet) ? "" : " (사용 불가)");
+          option.disabled = !isUsableXlsxSheet(sheet);
           xlsxSheetSel.appendChild(option);
         });
         if (xlsxSession.activeSheetId) {
@@ -2063,18 +2119,28 @@
       function createXlsxHistoryRecord(sheet) {
         const sourceMeta = sheet.data.sourceMeta || {};
         return {
+          version: 2,
           id: HISTORY_SOURCE_FILE + ":" + xlsxSession.fileName,
           sourceType: HISTORY_SOURCE_FILE,
           label: xlsxSession.fileName,
           count: Object.keys(sheet.data.translations || {}).length,
           fetchedAt: Date.now(),
-          data: sheet.data,
+          activeSheetId: sheet.id,
+          sheets: xlsxSession.sheets
+            .filter(isUsableXlsxSheet)
+            .map((candidate) => ({
+              id: candidate.id,
+              name: candidate.name,
+              status: "valid",
+              data: candidate.data,
+              error: null,
+            })),
           sourceMeta: sourceMeta,
         };
       }
-      function activateXlsxSheet(sheetId) {
+      function activateXlsxSheet(sheetId, options) {
         const sheet = getXlsxSheetById(sheetId);
-        if (!(sheet && sheet.status === "valid" && sheet.data)) {
+        if (!isUsableXlsxSheet(sheet)) {
           throw new Error("선택한 워크시트를 사용할 수 없습니다.");
         }
 
@@ -2084,7 +2150,10 @@
         closeExportPanel();
         presentLoadedData(sheet.data);
         const record = createXlsxHistoryRecord(sheet);
-        upsertHistory(record);
+        const recordBytes = getJsonByteSize(record);
+        const shouldSaveHistory = !(options && options.saveHistory === false);
+        const historyTooLarge = recordBytes > MAX_XLSX_HISTORY_BYTES_PER_FILE;
+        if (shouldSaveHistory && !historyTooLarge) upsertHistory(record);
         updateXlsxSheetHint();
 
         let statusMessage =
@@ -2098,6 +2167,18 @@
         if (xlsxSession.ignoredSheetCount > 0) {
           statusMessage +=
             " 앞쪽 " + MAX_XLSX_SHEETS + "개 탭만 조회했습니다.";
+        }
+        if (shouldSaveHistory && historyTooLarge) {
+          statusMessage +=
+            " 파싱 데이터가 " +
+            formatByteSize(recordBytes) +
+            "로 이력 저장 기준 " +
+            formatByteSize(MAX_XLSX_HISTORY_BYTES_PER_FILE) +
+            "를 초과하여 이력에는 저장하지 않았습니다.";
+        } else if (shouldSaveHistory) {
+          statusMessage +=
+            " " + record.sheets.length + "개 탭을 이력에 저장했습니다 (" +
+            formatByteSize(recordBytes) + ").";
         }
         setStatus(statusMessage, "ok");
       }
@@ -2213,8 +2294,8 @@
           return;
         }
 
-        const record = getHistoryById(hist.value);
-        if (!(record && record.data)) {
+        const record = normalizeXlsxHistoryRecord(getHistoryById(hist.value));
+        if (!record) {
           setStatus("데이터를 입력하거나 저장된 이력을 선택하세요.", "err");
           return;
         }
@@ -2222,14 +2303,36 @@
         if (createHistorySourceType(record) === HISTORY_SOURCE_FILE) {
           setStatus("저장된 XLSX 스냅샷을 불러오는 중…");
           clearXlsxSession();
-          presentLoadedData(record.data);
-          const sourceMeta = record.sourceMeta || {};
+          const storedSheets = Array.isArray(record.sheets) ? record.sheets : [];
+          const firstValidSheet = storedSheets.find(isUsableXlsxSheet);
+          if (!firstValidSheet) {
+            setStatus("저장된 XLSX 이력에 사용할 수 있는 탭이 없습니다.", "err");
+            return;
+          }
+          const activeSheet =
+            storedSheets.find(
+              (sheet) =>
+                sheet.id === record.activeSheetId &&
+                isUsableXlsxSheet(sheet),
+            ) || firstValidSheet;
+          xlsxSession = {
+            fileName: record.label,
+            activeSheetId: activeSheet.id,
+            sheets: storedSheets,
+            ignoredSheetCount: 0,
+          };
+          renderXlsxSheetSelector();
+          activateXlsxSheet(activeSheet.id, { saveHistory: false });
           setStatus(
-            "저장된 XLSX 스냅샷을 불러왔습니다." +
-              (sourceMeta.sheetName ? " 선택 탭: " + sourceMeta.sheetName + "." : ""),
+            "저장된 XLSX 스냅샷을 불러왔습니다. 선택 탭: " +
+              activeSheet.name +
+              ".",
             "ok",
           );
           return;
+        }
+        if (!record.data) {
+          setStatus("저장된 이력에 데이터가 없습니다.", "err");
         }
       };
       applyBtn.onclick = () => {
@@ -2295,9 +2398,17 @@
         if (!msg) return;
         if (msg.type === "history-loaded") {
           historyCache = Array.isArray(msg.payload && msg.payload.history)
-            ? msg.payload.history
+            ? pruneHistory(msg.payload.history)
             : [];
           renderHistory();
+          return;
+        }
+        if (msg.type === "history-save-error") {
+          setStatus(
+            "파일을 불러왔지만 저장 공간 부족으로 이력에는 저장하지 못했습니다. " +
+              ((msg.payload && msg.payload.message) || ""),
+            "err",
+          );
           return;
         }
         if (msg.type === "selection-info") {

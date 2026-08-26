@@ -816,8 +816,15 @@ figma.ui.onmessage = async function (msg) {
       var historyPayload = msg && msg.payload ? msg.payload : {};
       var nextHistory = Array.isArray(historyPayload.history) ? historyPayload.history : [];
       historySaveQueue = historySaveQueue.catch(function () {}).then(async function () {
-        await figma.clientStorage.setAsync(HISTORY_KEY, nextHistory);
-        figma.ui.postMessage({ type: 'history-loaded', payload: { history: nextHistory } });
+        try {
+          await figma.clientStorage.setAsync(HISTORY_KEY, nextHistory);
+          figma.ui.postMessage({ type: 'history-loaded', payload: { history: nextHistory } });
+        } catch (error) {
+          figma.ui.postMessage({
+            type: 'history-save-error',
+            payload: { message: getErrorMessage(error) },
+          });
+        }
       });
       await historySaveQueue;
       return;
