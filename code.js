@@ -11,6 +11,7 @@ const KEY_MODE_DIRECT = 'direct';
 const KEY_MODE_FRAME = 'frame';
 const loadedFontCache = new Set();
 const unavailableFontCache = new Map();
+let historySaveQueue = Promise.resolve();
 
 function keyFromNodeName(name) {
   if (!name || name[0] !== '*') return null;
@@ -814,8 +815,11 @@ figma.ui.onmessage = async function (msg) {
     if (msg.type === 'save-history') {
       var historyPayload = msg && msg.payload ? msg.payload : {};
       var nextHistory = Array.isArray(historyPayload.history) ? historyPayload.history : [];
-      await figma.clientStorage.setAsync(HISTORY_KEY, nextHistory);
-      figma.ui.postMessage({ type: 'history-loaded', payload: { history: nextHistory } });
+      historySaveQueue = historySaveQueue.catch(function () {}).then(async function () {
+        await figma.clientStorage.setAsync(HISTORY_KEY, nextHistory);
+        figma.ui.postMessage({ type: 'history-loaded', payload: { history: nextHistory } });
+      });
+      await historySaveQueue;
       return;
     }
 

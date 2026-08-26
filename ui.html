@@ -194,6 +194,9 @@
         flex-direction: column;
         gap: 10px;
       }
+      .xlsx-sheet-field {
+        margin-top: 10px;
+      }
       .pills {
         display: flex;
         flex-wrap: wrap;
@@ -654,7 +657,7 @@
           <div class="header-name">시트 i18n 동기화</div>
           <div class="header-desc">번역 데이터 동기화</div>
         </div>
-        <span class="header-badge">1.0.2</span>
+        <span class="header-badge">1.0.3</span>
       </div>
       <div class="body">
         <div class="card">
@@ -676,9 +679,17 @@
               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               hidden
             />
+            <div id="xlsxSheetField" class="xlsx-sheet-field" hidden>
+              <label class="field-label" for="xlsxSheet">워크시트</label>
+              <div class="sel-wrap">
+                <select id="xlsxSheet"></select>
+              </div>
+              <div id="xlsxSheetHint" class="hint" aria-live="polite"></div>
+            </div>
             <div class="hint">
               Google Sheets URL/ID를 입력하고 새로고침하거나
-              <code>key</code> 컬럼이 포함된 XLSX 파일을 업로드하세요.
+              <code>key</code> 컬럼이 포함된 XLSX 파일을 업로드하세요. 표시된
+              앞쪽 탭은 최대 3개까지 조회합니다.
             </div>
           </div>
         </div>
@@ -865,6 +876,9 @@
       let historyCache = [];
       let previewLangs = [];
       let currentData = { translations: {}, languages: [] };
+      let xlsxSession = null;
+      let xlsxSessionSequence = 0;
+      let isXlsxLoading = false;
       let selectionInfo = {
         selectedNodeCount: 0,
         selectedRootCount: 0,
@@ -875,6 +889,7 @@
       const HISTORY_SOURCE_FILE = "file";
       const GOOGLE_SHEETS_TIMEOUT_MS = 10000;
       const XLSX_ACCEPTED_EXTENSIONS = [".xlsx"];
+      const MAX_XLSX_SHEETS = 3;
       const ALL_LANGS_VALUE = "__all__";
       const UTF8_DECODER = new TextDecoder("utf-8");
       const $ = (id) => document.getElementById(id);
@@ -882,7 +897,10 @@
         hist = $("history"),
         syncBtn = $("syncBtn"),
         uploadBtn = $("uploadBtn"),
-        xlsxInput = $("xlsxInput");
+        xlsxInput = $("xlsxInput"),
+        xlsxSheetField = $("xlsxSheetField"),
+        xlsxSheetSel = $("xlsxSheet"),
+        xlsxSheetHint = $("xlsxSheetHint");
       const langSel = $("lang"),
         langHint = $("langHint"),
         langPillsEl = $("langPills"),
@@ -963,11 +981,35 @@
       toastCard.onclick = (event) => {
         event.stopPropagation();
       };
+      function updateXlsxSheetControlState() {
+        const validSheetCount =
+          xlsxSession && Array.isArray(xlsxSession.sheets)
+            ? xlsxSession.sheets.filter((sheet) => sheet.status === "valid").length
+            : 0;
+        xlsxSheetSel.disabled = isXlsxLoading || validSheetCount <= 1;
+      }
+      function setXlsxLoading(nextLoading) {
+        isXlsxLoading = !!nextLoading;
+        uploadBtn.disabled = isXlsxLoading;
+        syncBtn.disabled = isXlsxLoading;
+        updateXlsxSheetControlState();
+        updateApplyButtonState();
+        updateDataActionState();
+      }
+      function clearXlsxSession() {
+        xlsxSessionSequence += 1;
+        xlsxSession = null;
+        xlsxSheetSel.innerHTML = "";
+        xlsxSheetHint.textContent = "";
+        xlsxSheetField.hidden = true;
+        setXlsxLoading(false);
+      }
       function updateApplyButtonState() {
         const hasLang = !!langSel.value;
         const isSelectionScope = applyScopeSel.value === "selection";
         const hasSelectionText = selectionInfo.selectedTextNodeCount > 0;
-        applyBtn.disabled = !hasLang || (isSelectionScope && !hasSelectionText);
+        applyBtn.disabled =
+          isXlsxLoading || !hasLang || (isSelectionScope && !hasSelectionText);
       }
       function getCurrentTranslationKeys() {
         return Object.keys((currentData && currentData.translations) || {});
@@ -981,11 +1023,12 @@
           currentData &&
           Array.isArray(currentData.languages) &&
           currentData.languages.length > 0;
-        exportBtn.disabled = !hasData;
-        exportLangSel.disabled = !hasData || !hasLangs;
-        exportConfirmBtn.disabled = !hasData;
-        if (!hasData) closeExportPanel();
-        detailBtn.disabled = !hasData;
+        const actionsDisabled = isXlsxLoading || !hasData;
+        exportBtn.disabled = actionsDisabled;
+        exportLangSel.disabled = actionsDisabled || !hasLangs;
+        exportConfirmBtn.disabled = actionsDisabled;
+        if (actionsDisabled) closeExportPanel();
+        detailBtn.disabled = actionsDisabled;
       }
       function renderLanguageOptions(selectEl, languages, allLabel, previousValue) {
         const selectedBefore =
@@ -1315,7 +1358,21 @@
           createHistorySourceType(record) === HISTORY_SOURCE_FILE
             ? "XLSX"
             : "시트";
-        return "[" + prefix + "] " + record.label + " · " + record.count + "개";
+        const sourceMeta = record && record.sourceMeta ? record.sourceMeta : {};
+        const sheetSuffix =
+          prefix === "XLSX" && sourceMeta.sheetName
+            ? " / " + sourceMeta.sheetName
+            : "";
+        return (
+          "[" +
+          prefix +
+          "] " +
+          record.label +
+          sheetSuffix +
+          " · " +
+          record.count +
+          "개"
+        );
       }
       function saveHistory(list) {
         historyCache = list.slice(0, MH);
@@ -1618,27 +1675,35 @@
             if (!relationshipId || !targetPath) return;
             relationshipMap.set(
               relationshipId,
-              resolveArchivePath("xl/workbook.xml", targetPath),
+              {
+                path: resolveArchivePath("xl/workbook.xml", targetPath),
+                type: relationshipNode.getAttribute("Type") || "",
+              },
             );
           },
         );
 
         return Array.from(workbookDocument.getElementsByTagName("sheet"))
-          .map((sheetNode) => {
+          .map((sheetNode, index) => {
             const relationshipId =
               getAttributeValue(sheetNode, "r:id") ||
               getAttributeValue(sheetNode, "id");
-            const sheetPath = relationshipMap.get(relationshipId);
-            if (!sheetPath) return null;
+            const relationship = relationshipMap.get(relationshipId) || null;
 
             return {
-              name: sheetNode.getAttribute("name") || sheetPath,
-              path: sheetPath,
+              id: relationshipId || "sheet-" + index,
+              name:
+                sheetNode.getAttribute("name") ||
+                (relationship && relationship.path) ||
+                "워크시트 " + (index + 1),
+              path: relationship ? relationship.path : "",
+              relationshipType: relationship ? relationship.type : "",
+              state: sheetNode.getAttribute("state") || "visible",
             };
           })
           .filter(Boolean);
       }
-      async function loadTranslationsFromXlsxFile(file) {
+      async function inspectXlsxWorkbook(file) {
         const extension = "." + String(file.name || "").split(".").pop().toLowerCase();
         if (XLSX_ACCEPTED_EXTENSIONS.indexOf(extension) < 0) {
           throw new Error(".xlsx 파일을 업로드해 주세요.");
@@ -1662,19 +1727,23 @@
               ),
             )
           : [];
-        const workbookSheets = resolveWorkbookSheets(
+        const visibleSheets = resolveWorkbookSheets(
           workbookDocument,
           workbookRelsDocument,
-        );
-        if (!workbookSheets.length) {
-          throw new Error("XLSX 파일에서 워크시트를 찾을 수 없습니다.");
+        ).filter((sheet) => sheet.state === "visible");
+        if (!visibleSheets.length) {
+          throw new Error("XLSX 파일에서 표시된 워크시트를 찾을 수 없습니다.");
         }
 
-        let lastError = null;
-        for (let i = 0; i < workbookSheets.length; i += 1) {
-          const sheet = workbookSheets[i];
+        const inspectedSheets = visibleSheets.slice(0, MAX_XLSX_SHEETS);
+        const sheetCandidates = [];
+        for (let i = 0; i < inspectedSheets.length; i += 1) {
+          const sheet = inspectedSheets[i];
 
           try {
+            if (!sheet.path) {
+              throw new Error("워크시트 경로를 찾을 수 없습니다.");
+            }
             const worksheetDocument = parseXmlDocument(
               await readZipEntryText(arrayBuffer, entries, sheet.path),
               sheet.name,
@@ -1683,17 +1752,37 @@
               extractWorksheetRows(worksheetDocument, sharedStrings),
               { sourceLabel: 'Worksheet "' + sheet.name + '"' },
             );
+            if (Object.keys(data.translations || {}).length === 0) {
+              throw new Error("번역 키가 없습니다.");
+            }
             data.sourceMeta = { sheetName: sheet.name, fileName: file.name };
-            return data;
+            sheetCandidates.push({
+              id: sheet.id,
+              name: sheet.name,
+              status: "valid",
+              data: data,
+              error: null,
+            });
           } catch (error) {
-            lastError = error;
+            sheetCandidates.push({
+              id: sheet.id,
+              name: sheet.name,
+              status: "invalid",
+              data: null,
+              error:
+                error && error.message
+                  ? error.message
+                  : "워크시트를 읽지 못했습니다.",
+            });
           }
         }
 
-        throw (
-          lastError ||
-          new Error('XLSX 파일에서 "key" 컬럼이 있는 워크시트를 찾을 수 없습니다.')
-        );
+        return {
+          fileName: file.name,
+          activeSheetId: null,
+          sheets: sheetCandidates,
+          ignoredSheetCount: Math.max(0, visibleSheets.length - MAX_XLSX_SHEETS),
+        };
       }
       async function loadTranslationsFromGoogleSheets(request) {
         return parseGoogleSheetPayload(
@@ -1915,6 +2004,103 @@
         renderTable(data);
         send(data);
       }
+      function getXlsxSheetById(sheetId) {
+        if (!(xlsxSession && Array.isArray(xlsxSession.sheets))) return null;
+        return xlsxSession.sheets.find((sheet) => sheet.id === sheetId) || null;
+      }
+      function updateXlsxSheetHint() {
+        if (!xlsxSession) {
+          xlsxSheetHint.textContent = "";
+          return;
+        }
+
+        const activeSheet = getXlsxSheetById(xlsxSession.activeSheetId);
+        const invalidSheets = xlsxSession.sheets.filter(
+          (sheet) => sheet.status !== "valid",
+        );
+        let hint =
+          xlsxSession.fileName +
+          " · 앞쪽 " +
+          xlsxSession.sheets.length +
+          "개 탭 조회";
+        if (activeSheet) hint += " · 선택: " + activeSheet.name;
+        if (invalidSheets.length) {
+          hint +=
+            " · 사용 불가: " +
+            invalidSheets.map((sheet) => sheet.name).join(", ");
+        }
+        if (xlsxSession.ignoredSheetCount > 0) {
+          hint += " · 이후 " + xlsxSession.ignoredSheetCount + "개 탭 무시";
+        }
+        xlsxSheetHint.textContent = hint;
+        xlsxSheetHint.title = invalidSheets
+          .map((sheet) => sheet.name + ": " + sheet.error)
+          .join("\n");
+      }
+      function renderXlsxSheetSelector() {
+        xlsxSheetSel.innerHTML = "";
+        if (!(xlsxSession && xlsxSession.sheets.length)) {
+          xlsxSheetField.hidden = true;
+          updateXlsxSheetControlState();
+          return;
+        }
+
+        xlsxSession.sheets.forEach((sheet) => {
+          const option = document.createElement("option");
+          option.value = sheet.id;
+          option.textContent =
+            sheet.name + (sheet.status === "valid" ? "" : " (사용 불가)");
+          option.disabled = sheet.status !== "valid";
+          xlsxSheetSel.appendChild(option);
+        });
+        if (xlsxSession.activeSheetId) {
+          xlsxSheetSel.value = xlsxSession.activeSheetId;
+        }
+        xlsxSheetField.hidden = false;
+        updateXlsxSheetHint();
+        updateXlsxSheetControlState();
+      }
+      function createXlsxHistoryRecord(sheet) {
+        const sourceMeta = sheet.data.sourceMeta || {};
+        return {
+          id: HISTORY_SOURCE_FILE + ":" + xlsxSession.fileName,
+          sourceType: HISTORY_SOURCE_FILE,
+          label: xlsxSession.fileName,
+          count: Object.keys(sheet.data.translations || {}).length,
+          fetchedAt: Date.now(),
+          data: sheet.data,
+          sourceMeta: sourceMeta,
+        };
+      }
+      function activateXlsxSheet(sheetId) {
+        const sheet = getXlsxSheetById(sheetId);
+        if (!(sheet && sheet.status === "valid" && sheet.data)) {
+          throw new Error("선택한 워크시트를 사용할 수 없습니다.");
+        }
+
+        xlsxSession.activeSheetId = sheet.id;
+        xlsxSheetSel.value = sheet.id;
+        closeDetailView();
+        closeExportPanel();
+        presentLoadedData(sheet.data);
+        const record = createXlsxHistoryRecord(sheet);
+        upsertHistory(record);
+        updateXlsxSheetHint();
+
+        let statusMessage =
+          "불러옴: " +
+          record.count +
+          "개 키 / " +
+          record.label +
+          " (" +
+          sheet.name +
+          ").";
+        if (xlsxSession.ignoredSheetCount > 0) {
+          statusMessage +=
+            " 앞쪽 " + MAX_XLSX_SHEETS + "개 탭만 조회했습니다.";
+        }
+        setStatus(statusMessage, "ok");
+      }
       function openXlsxPicker() {
         if (typeof xlsxInput.showPicker === "function") {
           try {
@@ -1932,34 +2118,47 @@
           event && event.target && event.target.files ? event.target.files[0] : null;
         if (!file) return;
 
+        const sessionId = ++xlsxSessionSequence;
+        xlsxSession = null;
+        xlsxSheetField.hidden = true;
+        setXlsxLoading(true);
         setStatus("XLSX 파일을 읽는 중…");
         try {
-          const data = await loadTranslationsFromXlsxFile(file);
-          presentLoadedData(data);
+          const nextSession = await inspectXlsxWorkbook(file);
+          if (sessionId !== xlsxSessionSequence) return;
 
-          const sourceMeta = data.sourceMeta || {};
-          const record = {
-            id: HISTORY_SOURCE_FILE + ":" + file.name,
-            sourceType: HISTORY_SOURCE_FILE,
-            label: file.name,
-            count: Object.keys(data.translations || {}).length,
-            fetchedAt: Date.now(),
-            data: data,
-            sourceMeta: sourceMeta,
-          };
-          upsertHistory(record);
-          setStatus(
-            "불러옴: " +
-              record.count +
-              "개 키 / " +
-              file.name +
-              (sourceMeta.sheetName ? " (" + sourceMeta.sheetName + ")." : "."),
-            "ok",
+          xlsxSession = nextSession;
+          const firstValidSheet = xlsxSession.sheets.find(
+            (sheet) => sheet.status === "valid",
           );
+          if (!firstValidSheet) {
+            renderXlsxSheetSelector();
+            throw new Error(
+              '앞쪽 ' +
+                xlsxSession.sheets.length +
+                '개 탭에서 사용할 수 있는 "key" 데이터를 찾지 못했습니다. 기존 데이터는 유지됩니다.',
+            );
+          }
+
+          xlsxSession.activeSheetId = firstValidSheet.id;
+          renderXlsxSheetSelector();
+          activateXlsxSheet(firstValidSheet.id);
         } catch (error) {
+          if (sessionId !== xlsxSessionSequence) return;
           setStatus((error && error.message) || "XLSX 파일을 읽지 못했습니다.", "err");
         } finally {
+          if (sessionId === xlsxSessionSequence) setXlsxLoading(false);
           xlsxInput.value = "";
+        }
+      };
+      xlsxSheetSel.onchange = () => {
+        try {
+          activateXlsxSheet(xlsxSheetSel.value);
+        } catch (error) {
+          setStatus(
+            (error && error.message) || "워크시트를 변경하지 못했습니다.",
+            "err",
+          );
         }
       };
       async function refreshGoogleSheetData(request, fallbackRecord) {
@@ -1968,6 +2167,7 @@
         );
         try {
           const data = await loadTranslationsFromGoogleSheets(request);
+          clearXlsxSession();
           presentLoadedData(data);
 
           const record = {
@@ -2021,8 +2221,14 @@
 
         if (createHistorySourceType(record) === HISTORY_SOURCE_FILE) {
           setStatus("저장된 XLSX 스냅샷을 불러오는 중…");
+          clearXlsxSession();
           presentLoadedData(record.data);
-          setStatus("저장된 XLSX 스냅샷을 불러왔습니다.", "ok");
+          const sourceMeta = record.sourceMeta || {};
+          setStatus(
+            "저장된 XLSX 스냅샷을 불러왔습니다." +
+              (sourceMeta.sheetName ? " 선택 탭: " + sourceMeta.sheetName + "." : ""),
+            "ok",
+          );
           return;
         }
       };
