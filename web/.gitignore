@@ -1,0 +1,4 @@
+.sites-runtime/
+.sites-checkout/
+fixtures/
+*.zip
