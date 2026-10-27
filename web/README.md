@@ -1,22 +1,26 @@
 # Sheet to JSON
 
-Figma 없이 XLSX 번역 파일을 언어별 JSON으로 변환하는 정적 웹페이지입니다. 외부 패키지, CDN, 서버 업로드 없이 브라우저에서 처리합니다.
+A static page that converts XLSX translations into language JSON files without Figma. Files are processed entirely in the browser, with no external packages, CDN, or server uploads.
 
-## 실행
+## Run locally
 
-저장소 루트에서 `node web/serve.mjs`를 실행하고 http://127.0.0.1:4173 에 접속합니다. ES 모듈을 사용하므로 HTML을 직접 더블 클릭하는 대신 HTTP 서버로 실행합니다.
+Run `node web/serve.mjs` from the repository root and open http://127.0.0.1:4173. The page uses ES modules and must be served over HTTP instead of opening the HTML file directly.
 
-## 검증
+## Validation
 
-`node web/test.mjs`로 기존 플러그인의 JSON 결과와 비교하고 파싱 규칙, 특수 키와 ZIP 생성을 검증합니다. `web/fixtures/translations.xlsx`는 브라우저 업로드 검증용으로 생성됩니다.
+Run `node web/test.mjs` to compare JSON output with the plugin and verify parsing rules, special keys, and ZIP generation. It also creates `web/fixtures/translations.xlsx` for browser upload testing. Multilingual fixture values are intentionally preserved.
 
-## 규칙
+## Conversion rules
 
-- 첫 10개의 비어 있지 않은 행에서 `key` 헤더를 찾습니다. 다른 비어 있지 않은 헤더는 언어 코드로 인식하고 소문자로 정규화합니다.
-- 표시된 전체 워크시트를 검사합니다. 유효하지 않은 시트는 비활성화합니다.
-- 중복 키는 마지막 행, 빈 번역은 JSON에서 제외합니다. 점 구분 키는 중첩 객체로 변환합니다.
-- 모든 언어는 처음에 선택되어 있으며, 한 언어는 JSON, 여러 언어는 UTF-8 JSON을 담은 ZIP으로 다운로드합니다.
-- ZIP은 브라우저에서 압축 없이 생성합니다. XLSX 압축 해제에는 최신 브라우저의 `DecompressionStream`이 필요합니다.
-- 이력과 원본 파일은 저장하지 않습니다. 기존 플러그인 파일은 변경하지 않습니다.
+- The `key` header must appear within the first 10 non-empty rows. Other non-empty headers become lowercase language codes.
+- All visible worksheets are inspected. Invalid worksheets are disabled.
+- For duplicate keys, the last row wins. Empty translations are omitted. Dotted keys become nested objects.
+- All languages are selected initially. One language downloads as JSON; multiple languages download as a ZIP containing UTF-8 JSON files.
+- ZIP downloads use uncompressed entries generated in the browser. Reading compressed XLSX files requires a current browser with `DecompressionStream` support.
+- Files and history are not persisted.
 
-`dist/`가 배포할 전체 정적 파일입니다. 현재 사이트는 ChatGPT 계정 없이 접속할 수 있도록 공개되어 있습니다: https://sheet-to-json-jm.alertflea259.chatgpt.site/
+`dist/` contains the complete static site. The current live site is public and does not require a ChatGPT account: https://sheet-to-json-jm.alertflea259.chatgpt.site/
+
+## Branches
+
+`main` contains the English plugin and web UI. `feature/ko` contains the Korean version with the same functionality. The live website is deployed separately; changing Git branches does not change its language.

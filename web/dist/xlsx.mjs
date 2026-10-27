@@ -36,13 +36,13 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
           throw new Error(
             (options && options.sourceLabel
               ? options.sourceLabel
-              : "번역 데이터") + "에는 헤더와 최소 한 개의 데이터 행이 필요합니다.",
+              : "Translation data") + " requires a header and at least one data row.",
           );
         }
 
         const headerRowIndex = findHeaderRowIndex(compactRows);
         if (headerRowIndex < 0) {
-          throw new Error('"key" 컬럼을 찾을 수 없습니다.');
+          throw new Error('The "key" column was not found.');
         }
 
         const headerRow = compactRows[headerRowIndex];
@@ -54,7 +54,7 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
           )
           .filter(Boolean);
         if (!languageColumns.length) {
-          throw new Error("언어 컬럼을 찾을 수 없습니다.");
+          throw new Error("No language columns were found.");
         }
 
           const translations = Object.create(null);
@@ -97,7 +97,7 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
             return offset;
           }
         }
-        throw new Error("유효하지 않은 XLSX 파일입니다. ZIP 종료 레코드를 찾을 수 없습니다.");
+        throw new Error("Invalid XLSX file: ZIP end record was not found.");
       }
       function readZipEntries(arrayBuffer) {
         const view = new DataView(arrayBuffer);
@@ -117,7 +117,7 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
 
         while (offset < directoryEnd) {
           if (readUint32(view, offset) !== 0x02014b50) {
-            throw new Error("유효하지 않은 XLSX 파일입니다. ZIP 중앙 디렉터리가 손상되었습니다.");
+            throw new Error("Invalid XLSX file: ZIP central directory is damaged.");
           }
 
           const compressionMethod = readUint16(view, offset + 10);
@@ -144,7 +144,7 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
       async function inflateZipEntry(compressedBytes) {
         if (typeof DecompressionStream !== "function") {
           throw new Error(
-              "현재 브라우저에서는 XLSX 압축 해제를 지원하지 않습니다. 최신 Chrome 또는 Edge를 사용해 주세요.",
+              "This browser does not support XLSX decompression. Use a current version of Chrome or Edge.",
           );
         }
 
@@ -166,17 +166,17 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
           }
         }
 
-        throw lastError || new Error("XLSX 데이터를 압축 해제하지 못했습니다.");
+        throw lastError || new Error("Could not decompress XLSX data.");
       }
       async function readZipEntryBytes(arrayBuffer, entries, path) {
         const entry = entries.get(path);
         if (!entry) {
-          throw new Error("XLSX 내부 항목이 없습니다: " + path);
+          throw new Error("Missing XLSX archive entry: " + path);
         }
 
         const view = new DataView(arrayBuffer);
         if (readUint32(view, entry.localHeaderOffset) !== 0x04034b50) {
-          throw new Error("유효하지 않은 XLSX 파일입니다. ZIP 로컬 헤더가 손상되었습니다.");
+          throw new Error("Invalid XLSX file: ZIP local header is damaged.");
         }
 
         const fileNameLength = readUint16(view, entry.localHeaderOffset + 26);
@@ -194,7 +194,7 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
         }
         if (entry.compressionMethod !== 8) {
           throw new Error(
-            "지원하지 않는 XLSX 압축 방식입니다: " + entry.compressionMethod,
+            "Unsupported XLSX compression method: " + entry.compressionMethod,
           );
         }
 
@@ -206,7 +206,7 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
       function parseXmlDocument(xmlText, label) {
         const document = new DOMParser().parseFromString(xmlText, "application/xml");
         if (document.getElementsByTagName("parsererror").length > 0) {
-          throw new Error(label + " 파싱에 실패했습니다.");
+          throw new Error(label + " could not be parsed.");
         }
         return document;
       }
@@ -331,7 +331,7 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
               name:
                 sheetNode.getAttribute("name") ||
                 (relationship && relationship.path) ||
-                "워크시트 " + (index + 1),
+                "Worksheet " + (index + 1),
               path: relationship ? relationship.path : "",
               relationshipType: relationship ? relationship.type : "",
               state: sheetNode.getAttribute("state") || "visible",
@@ -342,7 +342,7 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
       async function inspectXlsxWorkbook(file) {
         const extension = "." + String(file.name || "").split(".").pop().toLowerCase();
         if (XLSX_ACCEPTED_EXTENSIONS.indexOf(extension) < 0) {
-          throw new Error(".xlsx 파일을 업로드해 주세요.");
+          throw new Error("Please upload an .xlsx file.");
         }
 
         const arrayBuffer = await file.arrayBuffer();
@@ -368,7 +368,7 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
           workbookRelsDocument,
         ).filter((sheet) => sheet.state === "visible");
         if (!visibleSheets.length) {
-          throw new Error("XLSX 파일에서 표시된 워크시트를 찾을 수 없습니다.");
+          throw new Error("No visible worksheets were found in the XLSX file.");
         }
 
         const inspectedSheets = visibleSheets;
@@ -378,7 +378,7 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
 
           try {
             if (!sheet.path) {
-              throw new Error("워크시트 경로를 찾을 수 없습니다.");
+              throw new Error("The worksheet path was not found.");
             }
             const worksheetDocument = parseXmlDocument(
               await readZipEntryText(arrayBuffer, entries, sheet.path),
@@ -389,7 +389,7 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
               { sourceLabel: 'Worksheet "' + sheet.name + '"' },
             );
             if (Object.keys(data.translations || {}).length === 0) {
-              throw new Error("번역 키가 없습니다.");
+              throw new Error("No translation keys were found.");
             }
             data.sourceMeta = { sheetName: sheet.name, fileName: file.name };
             sheetCandidates.push({
@@ -408,7 +408,7 @@ const UTF8_DECODER = new TextDecoder("utf-8"); const XLSX_ACCEPTED_EXTENSIONS = 
               error:
                 error && error.message
                   ? error.message
-                  : "워크시트를 읽지 못했습니다.",
+                  : "Could not read the worksheet.",
             });
           }
         }

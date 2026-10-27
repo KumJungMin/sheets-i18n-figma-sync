@@ -654,24 +654,24 @@
             </svg>
         </div>
         <div class="header-text">
-          <div class="header-name">시트 i18n 동기화</div>
-          <div class="header-desc">번역 데이터 동기화</div>
+          <div class="header-name">Sheets i18n Sync</div>
+          <div class="header-desc">Sync translation data</div>
         </div>
         <span class="header-badge">1.0.4</span>
       </div>
       <div class="body">
         <div class="card">
           <div class="card-head">
-            <span class="card-label">데이터 소스</span>
+            <span class="card-label">Data source</span>
           </div>
           <div class="card-body">
             <div class="row2">
               <input
                 id="sheetUrl"
                 type="text"
-                placeholder="데이터 소스를 입력하세요…"
+                placeholder="Enter a data source…"
               />
-              <button id="uploadBtn" class="btn" type="button">XLSX 업로드</button>
+              <button id="uploadBtn" class="btn" type="button">Upload XLSX</button>
             </div>
             <input
               id="xlsxInput"
@@ -680,83 +680,83 @@
               hidden
             />
             <div id="xlsxSheetField" class="xlsx-sheet-field" hidden>
-              <label class="field-label" for="xlsxSheet">워크시트</label>
+              <label class="field-label" for="xlsxSheet">Worksheet</label>
               <div class="sel-wrap">
                 <select id="xlsxSheet"></select>
               </div>
               <div id="xlsxSheetHint" class="hint" aria-live="polite"></div>
             </div>
             <div class="hint">
-              Google Sheets URL/ID를 입력하고 새로고침하거나
-              <code>key</code> 컬럼이 포함된 XLSX 파일을 업로드하세요. 표시된
-              앞쪽 탭은 최대 3개까지 조회합니다.
+              Enter a Google Sheets URL/ID and refresh, or upload an XLSX file with a
+              <code>key</code> column. The plugin inspects up to the
+              first three visible worksheets.
             </div>
           </div>
         </div>
         <div class="card">
-          <div class="card-head"><span class="card-label">이력</span></div>
+          <div class="card-head"><span class="card-label">History</span></div>
           <div class="card-body">
             <div class="row2">
               <div class="sel-wrap"><select id="history"></select></div>
-              <button id="syncBtn" class="btn">새로고침</button>
+              <button id="syncBtn" class="btn">Refresh</button>
             </div>
             <div class="hint">
-              저장된 시트는 최신 데이터로 다시 불러오고, 업로드한 XLSX는 저장된
-              스냅샷을 재사용합니다.
+              Saved Google Sheets reload the latest data. Uploaded XLSX files reuse their saved
+              snapshots.
             </div>
           </div>
         </div>
         <div class="card">
-          <div class="card-head"><span class="card-label">언어</span></div>
+          <div class="card-head"><span class="card-label">Language</span></div>
           <div class="card-body">
             <div class="stack">
               <div>
                 <div class="sel-wrap"><select id="lang"></select></div>
-                <div id="langHint" class="hint">먼저 번역 데이터를 불러오세요.</div>
+                <div id="langHint" class="hint">Load translations first.</div>
               </div>
               <div>
-                <div class="field-label">키 매핑</div>
+                <div class="field-label">Key mapping</div>
                 <div class="sel-wrap">
                   <select id="keyMode">
-                    <option value="direct">일반 키</option>
-                    <option value="frame">프레임 키</option>
+                    <option value="direct">Direct key</option>
+                    <option value="frame">Frame key</option>
                   </select>
                 </div>
                 <div class="hint">
-                  일반 키는 <code>*title</code>을 그대로 사용합니다. 프레임 키는
-                  <code>PD_JOIN_ServiceGuide</code> 아래의 <code>*title</code>을
-                  <code>PD_JOIN_ServiceGuide.title</code>로 매핑합니다.
+                  Direct keys use <code>*title</code> as-is. Frame keys map
+                  <code>*title</code> under <code>PD_JOIN_ServiceGuide</code> to
+                  <code>PD_JOIN_ServiceGuide.title</code>.
                 </div>
               </div>
               <div>
-                <div class="field-label">적용 범위</div>
+                <div class="field-label">Apply scope</div>
                 <div class="sel-wrap">
                   <select id="applyScope">
-                    <option value="page">현재 페이지</option>
-                    <option value="selection">선택 영역만</option>
+                    <option value="page">Current page</option>
+                    <option value="selection">Selection only</option>
                   </select>
                 </div>
                 <div id="scopeHint" class="hint">
-                  현재 페이지 전체에 적용합니다.
+                  Applies to the entire current page.
                 </div>
               </div>
             </div>
           </div>
           <div class="actions">
-            <button id="applyBtn" class="btn btn-v">적용</button>
+            <button id="applyBtn" class="btn btn-v">Apply</button>
             <div class="export-actions">
-              <button id="exportBtn" class="btn">json 파일로 내보내기</button>
+              <button id="exportBtn" class="btn">Export JSON</button>
               <div id="exportPanel" class="export-panel" hidden aria-hidden="true">
-                <div class="field-label">내보낼 언어</div>
+                <div class="field-label">Export language</div>
                 <div class="sel-wrap">
                   <select id="exportLang">
-                    <option value="__all__">전체 언어</option>
+                    <option value="__all__">All languages</option>
                   </select>
                 </div>
                 <div class="export-panel-actions">
-                  <button id="exportCancelBtn" class="btn" type="button">취소</button>
+                  <button id="exportCancelBtn" class="btn" type="button">Cancel</button>
                   <button id="exportConfirmBtn" class="btn btn-v" type="button">
-                    내보내기
+                    Export
                   </button>
                 </div>
               </div>
@@ -765,13 +765,13 @@
         </div>
         <div class="tbl-bar" style="margin-top: 6px">
           <div class="tbl-title">
-            <p class="tbl-label">데이터 미리보기</p>
+            <p class="tbl-label">Data preview</p>
             <span id="keyCnt" class="tbl-count" style="display: none"></span>
           </div>
-          <button id="detailBtn" class="btn btn-sm" type="button">자세히보기</button>
+          <button id="detailBtn" class="btn btn-sm" type="button">View details</button>
         </div>
         <div class="tbl-bar" style="border-radius: 0;">
-            <p class="tbl-label">미리보기 언어</p>
+            <p class="tbl-label">Preview languages</p>
             <div id="langPills" class="pills" style="margin-top: 0"></div>
           </div>
         <div class="tbl-wrap-outer">
@@ -785,7 +785,7 @@
               <tbody id="tableBody">
                 <tr>
                   <td colspan="4" class="empty-state">
-                    번역 데이터를 불러오면 키 미리보기가 표시됩니다
+                    Load translations to preview keys
                   </td>
                 </tr>
               </tbody>
@@ -801,23 +801,23 @@
           >
             <div class="detail-head">
               <div>
-                <div id="detailTitle" class="detail-title">다국어 목록</div>
-                <div id="detailCount" class="detail-sub">0개</div>
+                <div id="detailTitle" class="detail-title">Translations</div>
+                <div id="detailCount" class="detail-sub">0 items</div>
               </div>
               <button
                 id="detailCloseBtn"
                 class="toast-close detail-close"
                 type="button"
-                aria-label="상세 보기 닫기"
+                aria-label="Close details"
               >
                 ×
               </button>
             </div>
             <div class="detail-controls">
-              <input id="detailSearch" type="text" placeholder="검색" />
+              <input id="detailSearch" type="text" placeholder="Search" />
               <div class="sel-wrap">
                 <select id="detailLang">
-                  <option value="__all__">전체 언어</option>
+                  <option value="__all__">All languages</option>
                 </select>
               </div>
             </div>
@@ -825,13 +825,13 @@
               <table class="detail-table">
                 <thead>
                   <tr id="detailHead">
-                    <th class="key-col" style="width: 40%">키</th>
+                    <th class="key-col" style="width: 40%">Key</th>
                   </tr>
                 </thead>
                 <tbody id="detailBody">
                   <tr>
                     <td colspan="4" class="empty-state">
-                      번역 데이터를 불러오면 다국어 목록이 표시됩니다
+                      Load translations to view all languages
                     </td>
                   </tr>
                 </tbody>
@@ -840,7 +840,7 @@
           </div>
         </div>
         <div id="statusEl" class="statusbar">
-          <span class="sdot"></span><span>준비됨</span>
+          <span class="sdot"></span><span>Ready</span>
         </div>
       </div>
     </div>
@@ -855,7 +855,7 @@
             id="toastCloseBtn"
             class="toast-close"
             type="button"
-            aria-label="알림 닫기"
+            aria-label="Dismiss notification"
           >
             ×
           </button>
@@ -865,7 +865,7 @@
         </div>
         <div class="toast-foot">
           <button id="toastActionBtn" class="toast-action" type="button">
-            닫기
+            Close
           </button>
         </div>
       </div>
@@ -957,7 +957,7 @@
         toastCard.setAttribute("role", type === "err" ? "alertdialog" : "status");
         toastRoot.setAttribute("aria-hidden", "false");
         toastTitleEl.textContent =
-          type === "err" ? "오류" : "완료";
+          type === "err" ? "Error" : "Done";
         toastMessageEl.textContent = msg;
 
         if (type === "ok") {
@@ -1062,7 +1062,7 @@
         renderLanguageOptions(
           exportLangSel,
           languages,
-          "전체 언어",
+          "All languages",
           exportLangSel.value,
         );
       }
@@ -1070,38 +1070,38 @@
         renderLanguageOptions(
           detailLangSel,
           languages,
-          "전체 언어",
+          "All languages",
           detailLangSel.value,
         );
       }
       function renderScopeHint() {
         if (applyScopeSel.value !== "selection") {
           scopeHint.textContent =
-            "현재 페이지 전체에 적용합니다. 선택한 프레임이나 텍스트에만 적용하려면 선택 영역만을 사용하세요.";
+            "Applies to the entire current page. Choose Selection only to apply to selected frames or text.";
           updateApplyButtonState();
           return;
         }
 
         if (selectionInfo.selectedNodeCount === 0) {
           scopeHint.textContent =
-            "아직 선택된 항목이 없습니다. Figma에서 프레임, 그룹 또는 텍스트 레이어를 선택하세요.";
+            "Nothing is selected. Select a frame, group, or text layer in Figma.";
           updateApplyButtonState();
           return;
         }
 
         if (selectionInfo.selectedTextNodeCount === 0) {
           scopeHint.textContent =
-            "선택 영역은 있지만 텍스트 노드가 포함되어 있지 않습니다.";
+            "The selection contains no text nodes.";
           updateApplyButtonState();
           return;
         }
 
         scopeHint.textContent =
-          "선택 영역만: " +
+          "Selection only: " +
           selectionInfo.selectedNodeCount +
-          "개 레이어 선택, " +
+          " layers selected, " +
           selectionInfo.selectedTextNodeCount +
-          "개 텍스트 노드가 적용 대상입니다.";
+          " text nodes targeted.";
         updateApplyButtonState();
       }
       function setSelectionInfo(info) {
@@ -1156,14 +1156,14 @@
           const p = document.createElement("span");
           p.className = "pill" + (previewLangs.indexOf(l) >= 0 ? " on" : "");
           p.textContent = l;
-          p.title = "미리보기 컬럼은 최대 3개까지 선택할 수 있습니다";
+          p.title = "Select up to three preview columns";
           p.onclick = () => {
             const idx = previewLangs.indexOf(l);
             if (idx >= 0) {
               previewLangs.splice(idx, 1);
             } else {
               if (previewLangs.length >= 3) {
-                setStatus("미리보기 언어는 최대 3개까지 선택할 수 있습니다.", "err");
+                setStatus("Select up to three preview languages.", "err");
                 return;
               }
               previewLangs.push(l);
@@ -1217,7 +1217,7 @@
           const script = document.createElement("script");
           const timeoutId = setTimeout(() => {
             cleanup();
-            reject(new Error("요청 시간이 초과되었습니다."));
+            reject(new Error("The request timed out."));
           }, GOOGLE_SHEETS_TIMEOUT_MS);
           const previousGoogle = window.google;
           function cleanup() {
@@ -1243,7 +1243,7 @@
           };
           script.onerror = () => {
             cleanup();
-            reject(new Error("불러오기에 실패했습니다. 공유 설정을 확인하세요."));
+            reject(new Error("Could not load data. Check sharing settings."));
           };
           script.src = createGoogleSheetJsonpUrl(id, gid);
           document.body.appendChild(script);
@@ -1254,7 +1254,7 @@
       }
       function extractGoogleSheetRows(payload) {
         if (!(payload && payload.table && payload.table.cols && payload.table.rows))
-          throw new Error("응답 형식이 올바르지 않습니다. 공개 설정을 확인하세요.");
+          throw new Error("Invalid response format. Check public sharing settings.");
 
         const columns = payload.table.cols;
         const rows = payload.table.rows.map((row) =>
@@ -1303,13 +1303,13 @@
           throw new Error(
             (options && options.sourceLabel
               ? options.sourceLabel
-              : "번역 데이터") + "에는 헤더와 최소 한 개의 데이터 행이 필요합니다.",
+              : "Translation data") + " requires a header and at least one data row.",
           );
         }
 
         const headerRowIndex = findHeaderRowIndex(compactRows);
         if (headerRowIndex < 0) {
-          throw new Error('"key" 컬럼을 찾을 수 없습니다.');
+          throw new Error('The "key" column was not found.');
         }
 
         const headerRow = compactRows[headerRowIndex];
@@ -1321,7 +1321,7 @@
           )
           .filter(Boolean);
         if (!languageColumns.length) {
-          throw new Error("언어 컬럼을 찾을 수 없습니다.");
+          throw new Error("No language columns were found.");
         }
 
         const translations = {};
@@ -1350,7 +1350,7 @@
       }
       function parseGoogleSheetPayload(payload) {
         return parseTranslationTableRows(extractGoogleSheetRows(payload), {
-          sourceLabel: "시트 데이터",
+          sourceLabel: "Sheet data",
         });
       }
       function createHistorySourceType(record) {
@@ -1362,7 +1362,7 @@
         const prefix =
           createHistorySourceType(record) === HISTORY_SOURCE_FILE
             ? "XLSX"
-            : "시트";
+            : "Sheet";
         const sourceMeta = record && record.sourceMeta ? record.sourceMeta : {};
         const sheetSuffix =
           prefix === "XLSX" && sourceMeta.sheetName
@@ -1376,7 +1376,7 @@
           sheetSuffix +
           " · " +
           record.count +
-          "개"
+          " keys"
         );
       }
       function normalizeXlsxHistoryRecord(record) {
@@ -1401,7 +1401,7 @@
           sheets: [
             {
               id: sheetId,
-              name: sourceMeta.sheetName || "워크시트",
+              name: sourceMeta.sheetName || "Worksheet",
               status: "valid",
               data: record.data,
               error: null,
@@ -1453,7 +1453,7 @@
         if (!historyCache.length) {
           const option = document.createElement("option");
           option.value = "";
-          option.textContent = "이력이 없습니다";
+          option.textContent = "No history yet";
           hist.appendChild(option);
           return;
         }
@@ -1517,7 +1517,7 @@
             return offset;
           }
         }
-        throw new Error("유효하지 않은 XLSX 파일입니다. ZIP 종료 레코드를 찾을 수 없습니다.");
+        throw new Error("Invalid XLSX file: ZIP end record was not found.");
       }
       function readZipEntries(arrayBuffer) {
         const view = new DataView(arrayBuffer);
@@ -1537,7 +1537,7 @@
 
         while (offset < directoryEnd) {
           if (readUint32(view, offset) !== 0x02014b50) {
-            throw new Error("유효하지 않은 XLSX 파일입니다. ZIP 중앙 디렉터리가 손상되었습니다.");
+            throw new Error("Invalid XLSX file: ZIP central directory is damaged.");
           }
 
           const compressionMethod = readUint16(view, offset + 10);
@@ -1564,7 +1564,7 @@
       async function inflateZipEntry(compressedBytes) {
         if (typeof DecompressionStream !== "function") {
           throw new Error(
-            "현재 Figma 런타임에서는 XLSX 압축 해제를 지원하지 않습니다.",
+            "This Figma runtime does not support XLSX decompression.",
           );
         }
 
@@ -1586,17 +1586,17 @@
           }
         }
 
-        throw lastError || new Error("XLSX 데이터를 압축 해제하지 못했습니다.");
+        throw lastError || new Error("Could not decompress XLSX data.");
       }
       async function readZipEntryBytes(arrayBuffer, entries, path) {
         const entry = entries.get(path);
         if (!entry) {
-          throw new Error("XLSX 내부 항목이 없습니다: " + path);
+          throw new Error("Missing XLSX archive entry: " + path);
         }
 
         const view = new DataView(arrayBuffer);
         if (readUint32(view, entry.localHeaderOffset) !== 0x04034b50) {
-          throw new Error("유효하지 않은 XLSX 파일입니다. ZIP 로컬 헤더가 손상되었습니다.");
+          throw new Error("Invalid XLSX file: ZIP local header is damaged.");
         }
 
         const fileNameLength = readUint16(view, entry.localHeaderOffset + 26);
@@ -1614,7 +1614,7 @@
         }
         if (entry.compressionMethod !== 8) {
           throw new Error(
-            "지원하지 않는 XLSX 압축 방식입니다: " + entry.compressionMethod,
+            "Unsupported XLSX compression method: " + entry.compressionMethod,
           );
         }
 
@@ -1626,7 +1626,7 @@
       function parseXmlDocument(xmlText, label) {
         const document = new DOMParser().parseFromString(xmlText, "application/xml");
         if (document.getElementsByTagName("parsererror").length > 0) {
-          throw new Error(label + " 파싱에 실패했습니다.");
+          throw new Error(label + " could not be parsed.");
         }
         return document;
       }
@@ -1751,7 +1751,7 @@
               name:
                 sheetNode.getAttribute("name") ||
                 (relationship && relationship.path) ||
-                "워크시트 " + (index + 1),
+                "Worksheet " + (index + 1),
               path: relationship ? relationship.path : "",
               relationshipType: relationship ? relationship.type : "",
               state: sheetNode.getAttribute("state") || "visible",
@@ -1762,7 +1762,7 @@
       async function inspectXlsxWorkbook(file) {
         const extension = "." + String(file.name || "").split(".").pop().toLowerCase();
         if (XLSX_ACCEPTED_EXTENSIONS.indexOf(extension) < 0) {
-          throw new Error(".xlsx 파일을 업로드해 주세요.");
+          throw new Error("Please upload an .xlsx file.");
         }
 
         const arrayBuffer = await file.arrayBuffer();
@@ -1788,7 +1788,7 @@
           workbookRelsDocument,
         ).filter((sheet) => sheet.state === "visible");
         if (!visibleSheets.length) {
-          throw new Error("XLSX 파일에서 표시된 워크시트를 찾을 수 없습니다.");
+          throw new Error("No visible worksheets were found in the XLSX file.");
         }
 
         const inspectedSheets = visibleSheets.slice(0, MAX_XLSX_SHEETS);
@@ -1798,7 +1798,7 @@
 
           try {
             if (!sheet.path) {
-              throw new Error("워크시트 경로를 찾을 수 없습니다.");
+              throw new Error("The worksheet path was not found.");
             }
             const worksheetDocument = parseXmlDocument(
               await readZipEntryText(arrayBuffer, entries, sheet.path),
@@ -1809,7 +1809,7 @@
               { sourceLabel: 'Worksheet "' + sheet.name + '"' },
             );
             if (Object.keys(data.translations || {}).length === 0) {
-              throw new Error("번역 키가 없습니다.");
+              throw new Error("No translation keys were found.");
             }
             data.sourceMeta = { sheetName: sheet.name, fileName: file.name };
             sheetCandidates.push({
@@ -1828,7 +1828,7 @@
               error:
                 error && error.message
                   ? error.message
-                  : "워크시트를 읽지 못했습니다.",
+                  : "Could not read the worksheet.",
             });
           }
         }
@@ -1859,9 +1859,9 @@
             document.execCommand("copy");
             textarea.remove();
           }
-          setStatus("복사됨: " + copiedText, "ok");
+          setStatus("Copied: " + copiedText, "ok");
         } catch (e) {
-          setStatus("복사 실패: " + copiedText, "err");
+          setStatus("Copy failed: " + copiedText, "err");
         }
       }
       function renderTableHead(rowEl, langs, keyWidth) {
@@ -1870,7 +1870,7 @@
         const keyTh = document.createElement("th");
         keyTh.className = "key-col";
         keyTh.style.width = keyWidth + "%";
-        keyTh.textContent = "키";
+        keyTh.textContent = "Key";
         rowEl.appendChild(keyTh);
 
         const langWidth = langs.length ? (100 - keyWidth) / langs.length : 0;
@@ -1886,7 +1886,7 @@
         const kt = document.createElement("td");
         kt.className = "kc key-col";
         kt.textContent = key;
-        kt.title = "클릭하여 복사";
+        kt.title = "Click to copy";
         kt.onclick = () => copy(key);
         tr.appendChild(kt);
 
@@ -1914,14 +1914,14 @@
           langs.length <= 1 ? "100%" : 220 + langs.length * 160 + "px";
         const keys = getCurrentTranslationKeys().sort();
         if (keys.length) {
-          keyCnt.textContent = keys.length + "개";
+          keyCnt.textContent = keys.length + " keys";
           keyCnt.style.display = "";
         } else {
           keyCnt.style.display = "none";
         }
         if (!keys.length) {
           tbody.innerHTML =
-            '<tr><td colspan="10" class="empty-state">번역 데이터가 없습니다</td></tr>';
+            '<tr><td colspan="10" class="empty-state">No translations available</td></tr>';
           updateDataActionState();
           renderDetailTable();
           return;
@@ -1972,17 +1972,17 @@
         detailBody.innerHTML = "";
         detailBody.closest("table").style.minWidth =
           langs.length <= 1 ? "100%" : Math.max(620, 220 + langs.length * 170) + "px";
-        detailCount.textContent = visibleKeys.length + " / " + keys.length + "개";
+        detailCount.textContent = visibleKeys.length + " / " + keys.length + " keys";
 
         if (!keys.length) {
           detailBody.innerHTML =
-            '<tr><td colspan="10" class="empty-state">번역 데이터가 없습니다</td></tr>';
+            '<tr><td colspan="10" class="empty-state">No translations available</td></tr>';
           return;
         }
 
         if (!visibleKeys.length) {
           detailBody.innerHTML =
-            '<tr><td colspan="10" class="empty-state">검색 결과가 없습니다</td></tr>';
+            '<tr><td colspan="10" class="empty-state">No search results</td></tr>';
           return;
         }
 
@@ -2076,17 +2076,17 @@
         );
         let hint =
           xlsxSession.fileName +
-          " · 앞쪽 " +
+          " · First " +
           xlsxSession.sheets.length +
-          "개 탭 조회";
-        if (activeSheet) hint += " · 선택: " + activeSheet.name;
+          " worksheets inspected";
+        if (activeSheet) hint += " · Selected: " + activeSheet.name;
         if (invalidSheets.length) {
           hint +=
-            " · 사용 불가: " +
+            " · Unavailable: " +
             invalidSheets.map((sheet) => sheet.name).join(", ");
         }
         if (xlsxSession.ignoredSheetCount > 0) {
-          hint += " · 이후 " + xlsxSession.ignoredSheetCount + "개 탭 무시";
+          hint += " · Remaining " + xlsxSession.ignoredSheetCount + " worksheets skipped";
         }
         xlsxSheetHint.textContent = hint;
         xlsxSheetHint.title = invalidSheets
@@ -2105,7 +2105,7 @@
           const option = document.createElement("option");
           option.value = sheet.id;
           option.textContent =
-            sheet.name + (isUsableXlsxSheet(sheet) ? "" : " (사용 불가)");
+            sheet.name + (isUsableXlsxSheet(sheet) ? "" : " (unavailable)");
           option.disabled = !isUsableXlsxSheet(sheet);
           xlsxSheetSel.appendChild(option);
         });
@@ -2141,7 +2141,7 @@
       function activateXlsxSheet(sheetId, options) {
         const sheet = getXlsxSheetById(sheetId);
         if (!isUsableXlsxSheet(sheet)) {
-          throw new Error("선택한 워크시트를 사용할 수 없습니다.");
+          throw new Error("The selected worksheet is unavailable.");
         }
 
         xlsxSession.activeSheetId = sheet.id;
@@ -2157,27 +2157,27 @@
         updateXlsxSheetHint();
 
         let statusMessage =
-          "불러옴: " +
+          "Loaded: " +
           record.count +
-          "개 키 / " +
+          " keys / " +
           record.label +
           " (" +
           sheet.name +
           ").";
         if (xlsxSession.ignoredSheetCount > 0) {
           statusMessage +=
-            " 앞쪽 " + MAX_XLSX_SHEETS + "개 탭만 조회했습니다.";
+            " First " + MAX_XLSX_SHEETS + " worksheets inspected.";
         }
         if (shouldSaveHistory && historyTooLarge) {
           statusMessage +=
-            " 파싱 데이터가 " +
+            " Parsed data size: " +
             formatByteSize(recordBytes) +
-            "로 이력 저장 기준 " +
+            "; history limit: " +
             formatByteSize(MAX_XLSX_HISTORY_BYTES_PER_FILE) +
-            "를 초과하여 이력에는 저장하지 않았습니다.";
+            " exceeded. History was not saved.";
         } else if (shouldSaveHistory) {
           statusMessage +=
-            " " + record.sheets.length + "개 탭을 이력에 저장했습니다 (" +
+            " " + record.sheets.length + " worksheets saved in history (" +
             formatByteSize(recordBytes) + ").";
         }
         setStatus(statusMessage, "ok");
@@ -2203,7 +2203,7 @@
         xlsxSession = null;
         xlsxSheetField.hidden = true;
         setXlsxLoading(true);
-        setStatus("XLSX 파일을 읽는 중…");
+        setStatus("Reading XLSX file…");
         try {
           const nextSession = await inspectXlsxWorkbook(file);
           if (sessionId !== xlsxSessionSequence) return;
@@ -2215,9 +2215,9 @@
           if (!firstValidSheet) {
             renderXlsxSheetSelector();
             throw new Error(
-              '앞쪽 ' +
+              'First ' +
                 xlsxSession.sheets.length +
-                '개 탭에서 사용할 수 있는 "key" 데이터를 찾지 못했습니다. 기존 데이터는 유지됩니다.',
+                ' worksheets contain no usable "key" data. Existing data is preserved.',
             );
           }
 
@@ -2226,7 +2226,7 @@
           activateXlsxSheet(firstValidSheet.id);
         } catch (error) {
           if (sessionId !== xlsxSessionSequence) return;
-          setStatus((error && error.message) || "XLSX 파일을 읽지 못했습니다.", "err");
+          setStatus((error && error.message) || "Could not read the XLSX file.", "err");
         } finally {
           if (sessionId === xlsxSessionSequence) setXlsxLoading(false);
           xlsxInput.value = "";
@@ -2237,14 +2237,14 @@
           activateXlsxSheet(xlsxSheetSel.value);
         } catch (error) {
           setStatus(
-            (error && error.message) || "워크시트를 변경하지 못했습니다.",
+            (error && error.message) || "Could not switch worksheets.",
             "err",
           );
         }
       };
       async function refreshGoogleSheetData(request, fallbackRecord) {
         setStatus(
-          fallbackRecord ? "최신 데이터를 다시 불러오는 중…" : "데이터를 불러오는 중…",
+          fallbackRecord ? "Reloading the latest data…" : "Loading data…",
         );
         try {
           const data = await loadTranslationsFromGoogleSheets(request);
@@ -2262,26 +2262,26 @@
           };
           upsertHistory(record);
           setStatus(
-            (fallbackRecord ? "최신 데이터 동기화 완료: " : "불러옴: ") +
+            (fallbackRecord ? "Latest data synced: " : "Loaded: ") +
               (fallbackRecord
                 ? record.label
                 : record.count +
-                  "개 키 / " +
+                  " keys / " +
                   record.label +
-                  " 스냅샷 저장 완료."),
+                  " Snapshot saved."),
             "ok",
           );
         } catch (error) {
           if (fallbackRecord && fallbackRecord.data) {
             setStatus(
-              "최신 데이터 불러오기에 실패하여 저장된 데이터를 사용합니다. " +
+              "Could not load the latest data. Using the saved snapshot. " +
                 ((error && error.message) || ""),
               "err",
             );
             presentLoadedData(fallbackRecord.data);
             return;
           }
-          setStatus((error && error.message) || "데이터를 불러오지 못했습니다.", "err");
+          setStatus((error && error.message) || "Could not load data.", "err");
         }
       }
       syncBtn.onclick = async () => {
@@ -2296,17 +2296,17 @@
 
         const record = normalizeXlsxHistoryRecord(getHistoryById(hist.value));
         if (!record) {
-          setStatus("데이터를 입력하거나 저장된 이력을 선택하세요.", "err");
+          setStatus("Enter a data source or select a history item.", "err");
           return;
         }
 
         if (createHistorySourceType(record) === HISTORY_SOURCE_FILE) {
-          setStatus("저장된 XLSX 스냅샷을 불러오는 중…");
+          setStatus("Loading the saved XLSX snapshot…");
           clearXlsxSession();
           const storedSheets = Array.isArray(record.sheets) ? record.sheets : [];
           const firstValidSheet = storedSheets.find(isUsableXlsxSheet);
           if (!firstValidSheet) {
-            setStatus("저장된 XLSX 이력에 사용할 수 있는 탭이 없습니다.", "err");
+            setStatus("The saved XLSX history contains no usable worksheets.", "err");
             return;
           }
           const activeSheet =
@@ -2324,7 +2324,7 @@
           renderXlsxSheetSelector();
           activateXlsxSheet(activeSheet.id, { saveHistory: false });
           setStatus(
-            "저장된 XLSX 스냅샷을 불러왔습니다. 선택 탭: " +
+            "Saved XLSX snapshot loaded. Selected worksheet: " +
               activeSheet.name +
               ".",
             "ok",
@@ -2332,19 +2332,19 @@
           return;
         }
         if (!record.data) {
-          setStatus("저장된 이력에 데이터가 없습니다.", "err");
+          setStatus("The history item contains no data.", "err");
         }
       };
       applyBtn.onclick = () => {
         if (!langSel.value) {
-          setStatus("먼저 번역 데이터를 불러오세요.", "err");
+          setStatus("Load translations first.", "err");
           return;
         }
         if (
           applyScopeSel.value === "selection" &&
           selectionInfo.selectedTextNodeCount === 0
         ) {
-          setStatus("먼저 텍스트가 포함된 프레임 또는 텍스트 레이어를 선택하세요.", "err");
+          setStatus("Select a text layer or a frame containing text first.", "err");
           return;
         }
         parent.postMessage(
@@ -2405,7 +2405,7 @@
         }
         if (msg.type === "history-save-error") {
           setStatus(
-            "파일을 불러왔지만 저장 공간 부족으로 이력에는 저장하지 못했습니다. " +
+            "The file was loaded, but history could not be saved due to insufficient storage. " +
               ((msg.payload && msg.payload.message) || ""),
             "err",
           );
@@ -2424,50 +2424,50 @@
             ? msg.payload.languages
             : [];
           if (langs.length) setLangs(langs);
-          setStatus(msg.payload.count + "개 키를 불러왔습니다.", "ok");
+          setStatus(msg.payload.count + " keys loaded.", "ok");
           return;
         }
         if (msg.type === "apply-result") {
           const r = msg.payload;
           const scopeNote =
             r.applyScope === "selection"
-              ? " 범위: 선택 영역."
-              : " 범위: 현재 페이지.";
+              ? " Scope: selection."
+              : " Scope: current page.";
           const changedNote =
             typeof r.changedNodeCount === "number"
-              ? " 변경 대상: " + r.changedNodeCount + "개."
+              ? " Changes planned: " + r.changedNodeCount + "."
               : "";
           const ambiguousNote = r.skippedAmbiguousAncestor
-            ? " 건너뜀: " +
+            ? " Skipped: " +
               r.skippedAmbiguousAncestor +
-              "개 모호한 노드. 대상 텍스트 레이어 이름을 *key 형식으로 바꿔 주세요."
+              " ambiguous nodes. Rename the target text layer using *key."
             : "";
           const missingKeyNote = r.skippedMissingKey
-            ? " 누락 키: " + r.skippedMissingKey + "개."
+            ? " Missing keys: " + r.skippedMissingKey + "."
             : "";
           const missingValueNote = r.skippedMissingValue
-            ? " 누락 번역값: " + r.skippedMissingValue + "개."
+            ? " Missing translations: " + r.skippedMissingValue + "."
             : "";
           const screenFrameNote = r.skippedMissingScreenFrame
-            ? " 건너뜀: " +
+            ? " Skipped: " +
               r.skippedMissingScreenFrame +
-              "개 노드. 프레임 키 모드에 필요한 최상위 프레임이 없습니다."
+              " nodes: frame key mode requires a top-level frame."
             : "";
           const fontNote = r.skippedFontLoad
-            ? " 건너뜀: " +
+            ? " Skipped: " +
               r.skippedFontLoad +
-              "개 노드. 사용할 수 없는 폰트 때문입니다" +
+              " nodes due to unavailable fonts" +
               (Array.isArray(r.fontLoadErrors) && r.fontLoadErrors.length
                 ? " (" + r.fontLoadErrors.join(", ") + ")"
                 : "") +
               "."
             : "";
           setStatus(
-            "적용 완료: " +
+            "Applied: " +
               r.appliedCount +
               " / " +
               r.totalTextNodes +
-              "개 텍스트 노드." +
+              " text nodes." +
               scopeNote +
               changedNote +
               missingKeyNote +
@@ -2493,7 +2493,7 @@
             URL.revokeObjectURL(u);
           });
           setStatus(
-            Object.keys(files).length + "개 JSON 파일을 다운로드했습니다.",
+            Object.keys(files).length + " JSON files downloaded.",
             "ok",
           );
         }

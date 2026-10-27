@@ -154,14 +154,14 @@ function normalizeHeaderCell(value) {
 function parseCsv(csvText) {
   var lines = csvText.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
   if (lines.length < 2) {
-    throw new Error('CSV에는 헤더와 최소 한 개의 데이터 행이 필요합니다.');
+    throw new Error('CSV requires a header and at least one data row.');
   }
 
   var header = parseCsvLine(lines[0]);
   var normalizedHeader = header.map(normalizeHeaderCell);
   var keyIndex = normalizedHeader.indexOf('key');
   if (keyIndex < 0) {
-    throw new Error('CSV 헤더에 key 컬럼이 필요합니다. 현재 헤더: ' + header.join(', '));
+    throw new Error('CSV requires a key column. Current headers: ' + header.join(', '));
   }
 
   var languageColumns = [];
@@ -172,7 +172,7 @@ function parseCsv(csvText) {
   }
 
   if (languageColumns.length === 0) {
-    throw new Error('CSV에는 최소 한 개의 언어 컬럼이 필요합니다.');
+    throw new Error('CSV requires at least one language column.');
   }
 
   var map = {};
@@ -194,7 +194,7 @@ function parseCsv(csvText) {
 
 async function fetchTranslationsInPlugin(inputUrl) {
   var candidates = resolveCsvCandidates(inputUrl);
-  if (candidates.length === 0) throw new Error('유효한 데이터 주소를 찾을 수 없습니다.');
+  if (candidates.length === 0) throw new Error('No valid data URL was found.');
 
   var lastError = null;
   for (var i = 0; i < candidates.length; i += 1) {
@@ -212,7 +212,7 @@ async function fetchTranslationsInPlugin(inputUrl) {
     }
   }
 
-  throw new Error('시트 데이터를 불러오거나 파싱하지 못했습니다. 공개 설정과 key 헤더를 확인하세요.');
+  throw new Error('Could not load or parse sheet data. Check sharing settings and the key header.');
 }
 
 function fontKey(font) {
@@ -282,9 +282,9 @@ function resolveFrameNamespace(node) {
   while (current && current.type !== 'PAGE' && current.type !== 'DOCUMENT') {
     var namespace = namespaceFromNodeName(current.name);
 
-    // 예: ez.join.idCardCamera
-    // Section / Group / Wrapper 같은 상위 노드가 있어도
-    // 가장 가까운 dot namespace 조상을 프레임 key prefix로 사용한다.
+    // Example: ez.join.idCardCamera
+    // Use the nearest dotted namespace ancestor as the frame key prefix,
+    // even when sections, groups, or wrappers appear above it.
     if (isFrameNamespaceCandidate(namespace)) {
       return namespace;
     }
@@ -427,8 +427,8 @@ function resolveKeyForTextNode(node, descendantCountCache, ancestorResolutionCac
   var normalizedKeyMode = normalizeKeyMode(keyMode);
   var directKey = keyFromNodeName(node.name);
 
-  // Case 1. 텍스트 노드 자체가 *key 인 경우
-  // 예:
+  // Case 1. The text node itself is named *key.
+  // Example:
   // ez.join.idCardCamera
   // └─ *title
   //
@@ -465,8 +465,8 @@ function resolveKeyForTextNode(node, descendantCountCache, ancestorResolutionCac
     if (ancestorKey) {
       var descendantCount = countTextDescendants(current, descendantCountCache);
 
-      // Case 2. 부모/조상 레이어가 *key 이고, 하위 text가 1개인 경우
-      // 예:
+      // Case 2. A parent or ancestor is named *key and contains one text node.
+      // Example:
       // ez.join.idCardCamera
       // └─ *title
       //    └─ Text
@@ -752,10 +752,10 @@ async function commitTextUpdates(updates, result) {
 async function applyTranslations(lang, options) {
   var applyTargets = resolveApplyTargets(options && options.scope);
   if (applyTargets.type === 'empty-selection') {
-    throw new Error('선택 영역 모드를 사용하려면 프레임, 그룹 또는 텍스트 레이어를 선택하세요.');
+    throw new Error('Select a frame, group, or text layer to use selection scope.');
   }
   if (applyTargets.type === 'selection-without-text') {
-    throw new Error('현재 선택 영역에 텍스트 노드가 없습니다.');
+    throw new Error('The current selection contains no text nodes.');
   }
 
   var keyMode = normalizeKeyMode(options && options.keyMode);
@@ -780,7 +780,7 @@ async function applyTranslations(lang, options) {
 }
 
 function getErrorMessage(error) {
-  if (!error) return '알 수 없는 플러그인 오류';
+  if (!error) return 'Unknown plugin error';
   if (typeof error === 'string') return error;
 
   if (typeof error.message === 'string' && error.message) {
@@ -838,7 +838,7 @@ figma.ui.onmessage = async function (msg) {
         type: 'set-translations-success',
         payload: { count: Object.keys(translations).length, languages: availableLanguages },
       });
-      figma.notify(Object.keys(translations).length + '개 i18n 키를 불러왔습니다.');
+      figma.notify(Object.keys(translations).length + ' i18n keys loaded.');
       return;
     }
 
@@ -851,13 +851,13 @@ figma.ui.onmessage = async function (msg) {
         type: 'set-translations-success',
         payload: { count: Object.keys(translations).length, languages: availableLanguages },
       });
-      figma.notify(Object.keys(translations).length + '개 i18n 키를 불러왔습니다.');
+      figma.notify(Object.keys(translations).length + ' i18n keys loaded.');
       return;
     }
 
     if (msg.type === 'apply-translations') {
       if (Object.keys(translations).length === 0) {
-        figma.ui.postMessage({ type: 'error', payload: '번역 데이터가 없습니다. 먼저 데이터를 불러오세요.' });
+        figma.ui.postMessage({ type: 'error', payload: 'No translations available. Load data first.' });
         return;
       }
 
@@ -866,28 +866,28 @@ figma.ui.onmessage = async function (msg) {
       var scope = normalizeApplyScope(applyPayload.scope);
       var keyMode = normalizeKeyMode(applyPayload.keyMode);
       if (!lang) {
-        figma.ui.postMessage({ type: 'error', payload: '언어를 선택해 주세요.' });
+        figma.ui.postMessage({ type: 'error', payload: 'Please select a language.' });
         return;
       }
 
       var applyResult = await applyTranslations(lang, { scope: scope, keyMode: keyMode });
       var notifyMessage =
-        '적용 완료: ' +
+        'Applied: ' +
         applyResult.appliedCount +
         ' / ' +
         applyResult.changedNodeCount +
-        '개 변경 (' +
+        ' changes (' +
         lang +
         ').';
       if (applyResult.applyScope === APPLY_SCOPE_SELECTION) {
-        notifyMessage += ' 선택 영역 기준입니다.';
+        notifyMessage += ' Scope: selection.';
       }
       if (applyResult.skippedMissingScreenFrame > 0) {
         notifyMessage +=
-          ' 최상위 프레임이 없어 ' + applyResult.skippedMissingScreenFrame + '개를 건너뛰었습니다.';
+          ' Missing top-level frame; skipped ' + applyResult.skippedMissingScreenFrame + ' nodes.';
       }
       if (applyResult.skippedFontLoad > 0) {
-        notifyMessage += ' 사용할 수 없는 폰트로 인해 ' + applyResult.skippedFontLoad + '개를 건너뛰었습니다.';
+        notifyMessage += ' Unavailable fonts; skipped ' + applyResult.skippedFontLoad + ' nodes.';
       }
       figma.notify(notifyMessage);
       figma.ui.postMessage({ type: 'apply-result', payload: applyResult });
@@ -896,7 +896,7 @@ figma.ui.onmessage = async function (msg) {
 
     if (msg.type === 'export-json') {
       if (Object.keys(translations).length === 0) {
-        figma.ui.postMessage({ type: 'error', payload: '번역 데이터가 없습니다. 먼저 데이터를 불러오세요.' });
+        figma.ui.postMessage({ type: 'error', payload: 'No translations available. Load data first.' });
         return;
       }
 
@@ -915,7 +915,7 @@ figma.ui.onmessage = async function (msg) {
         langs = allLangs.slice();
       }
       if (langs.length === 0) {
-        figma.ui.postMessage({ type: 'error', payload: '내보낼 언어를 선택해 주세요.' });
+        figma.ui.postMessage({ type: 'error', payload: 'Please select a language to export.' });
         return;
       }
       var files = {};
@@ -925,7 +925,7 @@ figma.ui.onmessage = async function (msg) {
       }
 
       figma.ui.postMessage({ type: 'export-json-result', payload: { files: files, languages: langs } });
-      figma.notify(langs.length + '개 언어 JSON 파일을 준비했습니다.');
+      figma.notify(langs.length + ' language JSON files are ready.');
       return;
     }
   } catch (error) {
